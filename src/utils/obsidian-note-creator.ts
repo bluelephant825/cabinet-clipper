@@ -106,11 +106,22 @@ export async function saveToCabinet(
 	frontmatter: Record<string, any>,
 	noteName: string,
 	path: string,
+	vault: string,
 	cabinetUrl: string
 ): Promise<boolean> {
 	try {
 		// Ensure path ends with a slash if provided
 		let folderPath = path.trim();
+		if (vault.trim()) {
+			const vaultSegments = vault.trim().split('/');
+			if (vaultSegments.length > 1) {
+				// Drop the root cabinet name (first segment)
+				const roomPath = vaultSegments.slice(1).join('/');
+				folderPath = roomPath ? `${roomPath}/${folderPath}` : folderPath;
+			} else {
+				folderPath = `${vault.trim()}/${folderPath}`;
+			}
+		}
 		if (folderPath && !folderPath.endsWith('/')) {
 			folderPath += '/';
 		}

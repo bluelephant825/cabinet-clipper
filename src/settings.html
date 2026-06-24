@@ -22,7 +22,6 @@
 						<li data-section="highlighter"><div class="nav-item-icon"><i data-lucide="highlighter"></i></div><span data-i18n="highlighter">Highlighter</span></li>
 						<li data-section="interpreter"><div class="nav-item-icon"><i data-lucide="quote"></i></div><span data-i18n="interpreter">Interpreter</span></li>
 						<li data-section="properties"><div class="nav-item-icon"><i data-lucide="archive"></i></div><span data-i18n="properties">Properties</span></li>
-						<li data-section="integrations"><div class="nav-item-icon"><i data-lucide="link"></i></div><span data-i18n="integrations">Integrations</span></li>
 						<li class="sidebar-heading" data-i18n="templatesHeading">Templates</li>
 					</ul>
 					<button type="button" id="new-template-btn" class="mod-cta" data-i18n="newTemplate">New&nbsp;template</button>
@@ -128,12 +127,28 @@
 									</div>
 								</div>
 							</div>
+							<div class="setting-group" id="cabinet-integration-group">
+								<div class="setting-item setting-item-heading"><h3 data-i18n="cabinetIntegration">Cabinet</h3></div>
+								<div class="setting-items">
+									<div class="setting-item">
+										<div class="setting-item-info">
+											<label for="cabinet-url" data-i18n="cabinetUrl">Cabinet API URL</label>
+											<div class="setting-item-description" data-i18n="cabinetUrlDescription">The URL of your Cabinet instance.</div>
+										</div>
+										<div class="setting-item-control" style="display: flex; gap: 8px; margin-top: 8px; width: 100%;">
+											<input type="text" id="cabinet-url" placeholder="http://localhost:4000" style="flex: 1;" />
+											<button type="button" id="verify-connection-btn" class="btn" style="width: auto;">Verify connection</button>
+										</div>
+										<div id="connection-status" style="margin-top: 8px; display: none; align-items: center; gap: 6px; font-size: var(--font-ui-smaller);"></div>
+									</div>
+								</div>
+							</div>
 							<div class="setting-group">
 								<div class="setting-item setting-item-heading"><h3 data-i18n="vaults">Vaults</h3></div>
 								<div class="setting-items">
-								<div class="setting-item-description" data-i18n="vaultsDescription">By default, clipped notes are saved to the currently open vault. You can add vaults here if you want the option to save to different vaults. Vault names must exactly match the name of the Obsidian vault. Press <strong>enter</strong> to add a&nbsp;vault.</div>
-								<input type="text" id="vault-input" data-i18n="addVaultPlaceholder" placeholder="Press enter to add a vault" autocomplete="off" spellcheck="false" />
-								<ul id="vault-list" class="setting-item-list"></ul>
+									<div class="setting-item-description" data-i18n="vaultsDescription">By default, clipped notes are saved to the first vault. You can add vaults here if you want the option to save to different Cabinet vaults. Press <strong>enter</strong> to add a vault.</div>
+									<input type="text" id="vault-input" data-i18n="addVaultPlaceholder" placeholder="Press enter to add a vault" autocomplete="off" spellcheck="false" />
+									<ul id="vault-list" class="setting-item-list"></ul>
 								</div>
 							</div>
 							<div class="setting-group" id="hotkeys-subsection">
@@ -617,25 +632,6 @@
 						</form>
 					</div>
 
-					<div id="integrations-section" class="settings-section">
-						<div class="settings-section-header">
-							<h2 data-i18n="integrationsSettings">Integrations</h2>
-						</div>
-						<form id="integrations-settings-form">
-							<div class="setting-group">
-								<div class="setting-item setting-item-heading"><h3 data-i18n="cabinetIntegration">Cabinet</h3></div>
-								<div class="setting-items">
-									<div class="setting-item">
-										<div class="setting-item-info">
-											<label for="cabinet-url" data-i18n="cabinetUrl">Cabinet API URL</label>
-											<div class="setting-item-description" data-i18n="cabinetUrlDescription">The URL of your Cabinet instance.</div>
-										</div>
-										<input type="text" id="cabinet-url" placeholder="http://localhost:4000" />
-									</div>
-								</div>
-							</div>
-						</form>
-					</div>
 
 					<div id="templates-section" class="settings-section">
 						<div class="settings-section-header">

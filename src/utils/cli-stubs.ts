@@ -8,6 +8,7 @@ export default {} as any;
 
 export const generalSettings: Settings = {
 	vaults: [],
+	cabinetUrl: 'http://localhost:4000',
 	betaFeatures: false,
 	legacyMode: false,
 	silentOpen: false,

@@ -432,11 +432,55 @@ function initializeHighlighterSettings(): void {
 
 function initializeIntegrationsSettings(): void {
 	const cabinetUrlInput = document.getElementById('cabinet-url') as HTMLInputElement;
+	const verifyBtn = document.getElementById('verify-connection-btn') as HTMLButtonElement;
+	const statusDiv = document.getElementById('connection-status') as HTMLDivElement;
+
 	if (cabinetUrlInput) {
 		cabinetUrlInput.value = generalSettings.cabinetUrl || 'http://localhost:4000';
 		cabinetUrlInput.addEventListener('input', debounce(() => {
 			saveSettings({ cabinetUrl: cabinetUrlInput.value });
+			if (statusDiv) {
+				statusDiv.style.display = 'none';
+			}
 		}, 500));
+	}
+
+	if (verifyBtn && cabinetUrlInput && statusDiv) {
+		verifyBtn.addEventListener('click', async () => {
+			verifyBtn.disabled = true;
+			const originalText = verifyBtn.textContent || '';
+			verifyBtn.textContent = 'Verifying...';
+
+			statusDiv.style.display = 'flex';
+			statusDiv.style.alignItems = 'center';
+			statusDiv.style.gap = '6px';
+			statusDiv.innerHTML = 'Checking connection...';
+
+			try {
+				const baseUrl = cabinetUrlInput.value.replace(/\/+$/, '');
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+				const response = await fetch(`${baseUrl}/api/pages`, {
+					method: 'GET',
+					signal: controller.signal
+				});
+				clearTimeout(timeoutId);
+
+				if (response.status === 404) {
+					statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Verification failed: URL not found (404). Check if the API URL is correct.</span>`;
+				} else {
+					statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">Connected successfully!</span>`;
+				}
+			} catch (error: any) {
+				const msg = error.name === 'AbortError' ? 'Connection timed out after 5s.' : (error.message || 'Network error');
+				statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Verification failed: ${msg}</span>`;
+			} finally {
+				verifyBtn.disabled = false;
+				verifyBtn.textContent = originalText;
+				initializeIcons(statusDiv);
+			}
+		});
 	}
 }
 

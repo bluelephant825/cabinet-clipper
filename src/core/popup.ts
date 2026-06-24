@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { Template, Property, PromptVariable } from '../types/types';
 import { incrementStat, addHistoryEntry, getClipHistory } from '../utils/storage-utils';
-import { generateFrontmatterObject, saveToCabinet } from '../utils/obsidian-note-creator';
+import { generateFrontmatter, generateFrontmatterObject, saveToCabinet } from '../utils/obsidian-note-creator';
 import { extractPageContent, initializePageContent } from '../utils/content-extractor';
 import { compileTemplate } from '../utils/template-compiler';
 import { initializeIcons, getPropertyTypeIcon } from '../icons/icons';
@@ -1248,11 +1248,12 @@ async function handleSaveToDownloads() {
 		const path = pathField?.value || '';
 		const vault = vaultDropdown?.value || '';
 		
-		const properties = getPropertiesFromDOM();
+		const rawProperties = getPropertiesFromDOM();
+		const properties = cleanProperties(rawProperties);
 
 		const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
 		const frontmatter = await generateFrontmatter(properties);
-		const fileContent = frontmatter + noteContentField.value;
+		const fileContent = frontmatter + stripPrompts(noteContentField.value);
 
 		await saveFile({
 			content: fileContent,
@@ -1309,6 +1310,22 @@ function determineMainAction() {
 	}
 }
 
+function stripPrompts(text: string): string {
+	return text.replace(/{{(?:prompt:)?"([\s\S]*?)"(\|[\s\S]*?)?}}/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function cleanProperties(properties: Property[]): Property[] {
+	return properties.map(prop => {
+		if (typeof prop.value === 'string') {
+			return {
+				...prop,
+				value: prop.value.replace(/{{(?:prompt:)?"([\s\S]*?)"(\|[\s\S]*?)?}}/g, '').trim()
+			};
+		}
+		return prop;
+	});
+}
+
 async function handleClipCabinet(): Promise<void> {
 	if (!currentTemplate) return;
 
@@ -1324,21 +1341,19 @@ async function handleClipCabinet(): Promise<void> {
 	}
 
 	try {
-		// Handle interpreter if needed
+		// Wait for interpreter if it is currently running
 		if (generalSettings.interpreterEnabled && interpretBtn && collectPromptVariables(currentTemplate).length > 0) {
 			if (interpretBtn.classList.contains('processing')) {
-				await waitForInterpreter(interpretBtn);
-			} else if (!interpretBtn.classList.contains('done')) {
-				interpretBtn.click();
 				await waitForInterpreter(interpretBtn);
 			}
 		}
 
 		// Gather content
-		const properties = getPropertiesFromDOM();
+		const rawProperties = getPropertiesFromDOM();
+		const properties = cleanProperties(rawProperties);
 
 		const frontmatterObject = await generateFrontmatterObject(properties);
-		const fileContent = noteContentField.value;
+		const fileContent = stripPrompts(noteContentField.value);
 
 		// Save to Cabinet
 		const selectedVault = vaultDropdown.value || currentTemplate.vault || '';
@@ -1346,7 +1361,7 @@ async function handleClipCabinet(): Promise<void> {
 		const path = pathField?.value || '';
 		const cabinetUrl = generalSettings.cabinetUrl || 'http://localhost:4000';
 
-		const success = await saveToCabinet(fileContent, frontmatterObject, noteName, path, cabinetUrl);
+		const success = await saveToCabinet(fileContent, frontmatterObject, noteName, path, selectedVault, cabinetUrl);
 		
 		if (!success) {
 			showError('failedToSaveFile');
@@ -1406,11 +1421,12 @@ function getActionIcon(actionType: string): string {
 }
 
 async function copyContent() {
-	const properties = getPropertiesFromDOM();
+	const rawProperties = getPropertiesFromDOM();
+	const properties = cleanProperties(rawProperties);
 
 	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
 	const frontmatter = await generateFrontmatter(properties);
-	const fileContent = frontmatter + noteContentField.value;
+	const fileContent = frontmatter + stripPrompts(noteContentField.value);
 	await copyToClipboard(fileContent);
 }
 

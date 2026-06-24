@@ -1,9 +1,9 @@
 {
-	"name": "obsidian-clipper",
-	"version": "1.7.0",
-	"description": "Official web clipper for Obsidian.",
+	"name": "cabinet-clipper",
+	"version": "1.0.0",
+	"description": "Official web clipper for Cabinet.",
 	"bin": {
-		"obsidian-clipper": "./dist/cli.cjs"
+		"cabinet-clipper": "./dist/cli.cjs"
 	},
 	"files": [
 		"dist"

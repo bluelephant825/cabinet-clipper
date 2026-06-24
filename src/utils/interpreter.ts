@@ -1,4 +1,4 @@
-import { generalSettings, saveSettings } from './storage-utils';
+import { generalSettings, saveSettings, getLocalStorage, setLocalStorage } from './storage-utils';
 import { PromptVariable, Template, ModelConfig } from '../types/types';
 import { compileTemplate } from './template-compiler';
 import { applyFilters } from './filters';
@@ -571,14 +571,25 @@ export async function handleInterpreterUI(
 			responseTimer.textContent = formatDuration(elapsedTime);
 		}, 10);
 
-		const { promptResponses } = await sendToLLM(contextToUse, contentToProcess, promptVariables, modelConfig);
-		debugLog('Interpreter', 'LLM response:', { promptResponses });
+		// Check if we have cached responses first
+		let promptResponses = await getCachedInterpreterResponses(currentUrl, promptVariables);
+		let cached = false;
+
+		if (promptResponses) {
+			cached = true;
+			debugLog('Interpreter', 'Using cached LLM response:', { promptResponses });
+		} else {
+			const response = await sendToLLM(contextToUse, contentToProcess, promptVariables, modelConfig);
+			promptResponses = response.promptResponses;
+			debugLog('Interpreter', 'LLM response:', { promptResponses });
+			await cacheInterpreterResponses(currentUrl, promptVariables, promptResponses);
+		}
 
 		// Stop the timer and update UI
 		clearInterval(timerInterval);
 		const endTime = performance.now();
 		const totalTime = endTime - startTime;
-		responseTimer.textContent = formatDuration(totalTime);
+		responseTimer.textContent = cached ? 'cached' : formatDuration(totalTime);
 
 		// Update button state
 		interpretBtn.textContent = getMessage('done').toLowerCase();
@@ -671,4 +682,59 @@ export function replacePromptVariables(promptVariables: PromptVariable[], prompt
 			}
 		}
 	});
+}
+
+// Helper to cache interpreter responses for a specific URL
+async function cacheInterpreterResponses(url: string, promptVariables: PromptVariable[], promptResponses: any[]): Promise<void> {
+	try {
+		const cache = await getLocalStorage('interpreter_cache') || {};
+		const urlCache = cache[url] || {};
+		
+		promptVariables.forEach(variable => {
+			const response = promptResponses.find(r => r.key === variable.key);
+			if (response && response.user_response !== undefined) {
+				urlCache[variable.prompt] = response.user_response;
+			}
+		});
+		
+		cache[url] = urlCache;
+		
+		const urls = Object.keys(cache);
+		if (urls.length > 50) {
+			delete cache[urls[0]];
+		}
+		
+		await setLocalStorage('interpreter_cache', cache);
+	} catch (e) {
+		console.error('Error writing to interpreter cache:', e);
+	}
+}
+
+// Helper to retrieve cached interpreter responses for a specific URL
+async function getCachedInterpreterResponses(url: string, promptVariables: PromptVariable[]): Promise<any[] | null> {
+	try {
+		const cache = await getLocalStorage('interpreter_cache');
+		if (!cache || !cache[url]) {
+			return null;
+		}
+		
+		const urlCache = cache[url];
+		const promptResponses: any[] = [];
+		
+		for (const variable of promptVariables) {
+			if (urlCache[variable.prompt] !== undefined) {
+				promptResponses.push({
+					key: variable.key,
+					user_response: urlCache[variable.prompt]
+				});
+			} else {
+				return null;
+			}
+		}
+		
+		return promptResponses;
+	} catch (e) {
+		console.error('Error reading from interpreter cache:', e);
+		return null;
+	}
 }
