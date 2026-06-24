@@ -211,6 +211,69 @@ export function generateFrontmatter(
 	return frontmatter;
 }
 
+/**
+ * Generate a JavaScript object representing frontmatter from compiled properties.
+ * Useful when integrating with APIs (e.g. Cabinet) that expect a frontmatter object.
+ */
+export function generateFrontmatterObject(
+	properties: Property[],
+	propertyTypes: Record<string, string> = {}
+): Record<string, any> {
+	const frontmatter: Record<string, any> = { type: 'Clipping' };
+	for (const property of properties) {
+		const propertyName = property.name.trim();
+		if (!propertyName) continue;
+		
+		const propertyType = propertyTypes[property.name] || 'text';
+		const valueStr = String(property.value);
+
+		switch (propertyType) {
+			case 'multitext': {
+				let items: string[];
+				if (valueStr.trim().startsWith('["') && valueStr.trim().endsWith('"]')) {
+					try {
+						items = JSON.parse(valueStr);
+					} catch {
+						items = valueStr.split(',').map(item => item.trim());
+					}
+				} else {
+					items = valueStr.split(/,(?![^\[]*\]\])/).map(item => item.trim());
+				}
+				items = items.filter(item => item !== '');
+				if (items.length > 0) {
+					frontmatter[propertyName] = items;
+				}
+				break;
+			}
+			case 'number': {
+				const numericValue = valueStr.replace(/[^\d.-]/g, '');
+				if (numericValue) {
+					frontmatter[propertyName] = parseFloat(numericValue);
+				}
+				break;
+			}
+			case 'checkbox': {
+				const isChecked = typeof property.value === 'boolean' ? property.value : valueStr === 'true';
+				frontmatter[propertyName] = isChecked;
+				break;
+			}
+			case 'date':
+			case 'datetime':
+			default:
+				if (valueStr.trim() !== '') {
+					frontmatter[propertyName] = valueStr.trim();
+				}
+				break;
+		}
+	}
+	
+	// Force the type property to be 'Clipping'
+	frontmatter.type = 'Clipping';
+	
+	return frontmatter;
+}
+
+
 // ---------------------------------------------------------------------------
 // Property type formatting
 // ---------------------------------------------------------------------------

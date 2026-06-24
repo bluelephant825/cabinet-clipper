@@ -47,7 +47,8 @@ export let generalSettings: Settings = {
 	},
 	history: [],
 	ratings: [],
-	saveBehavior: 'addToObsidian'
+	saveBehavior: 'addToObsidian',
+	cabinetUrl: 'http://localhost:4000'
 };
 
 export function setLocalStorage(key: string, value: any): Promise<void> {
@@ -66,6 +67,7 @@ interface StorageData {
 		silentOpen?: boolean;
 		openBehavior?: boolean | 'popup' | 'embedded';
 		saveBehavior?: 'addToObsidian' | 'copyToClipboard' | 'saveFile';
+		cabinetUrl?: string;
 	};
 	vaults?: string[];
 	highlighter_settings?: {
@@ -134,6 +136,7 @@ export async function loadSettings(): Promise<Settings> {
 		defaultPromptContext: '',
 		propertyTypes: [],
 		saveBehavior: 'addToObsidian',
+		cabinetUrl: 'http://localhost:4000',
 		readerSettings: {
 			fontSize: 16,
 			lineHeight: 1.6,
@@ -216,7 +219,8 @@ export async function loadSettings(): Promise<Settings> {
 		stats: data.stats || defaultSettings.stats,
 		history: data.history || defaultSettings.history,
 		ratings: data.ratings || defaultSettings.ratings,
-		saveBehavior: data.general_settings?.saveBehavior ?? defaultSettings.saveBehavior
+		saveBehavior: data.general_settings?.saveBehavior ?? defaultSettings.saveBehavior,
+		cabinetUrl: data.general_settings?.cabinetUrl ?? defaultSettings.cabinetUrl
 	};
 
 	generalSettings = loadedSettings;
@@ -238,6 +242,7 @@ export async function saveSettings(settings?: Partial<Settings>): Promise<void> 
 			silentOpen: generalSettings.silentOpen,
 			openBehavior: generalSettings.openBehavior,
 			saveBehavior: generalSettings.saveBehavior,
+			cabinetUrl: generalSettings.cabinetUrl,
 		},
 		highlighter_settings: {
 			highlighterEnabled: generalSettings.highlighterEnabled,

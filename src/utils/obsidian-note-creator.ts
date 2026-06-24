@@ -1,6 +1,6 @@
 import browser from './browser-polyfill';
 import { sanitizeFileName } from '../utils/string-utils';
-import { generateFrontmatter as generateFrontmatterCore } from './shared';
+import { generateFrontmatter as generateFrontmatterCore, generateFrontmatterObject as generateFrontmatterObjectCore } from './shared';
 import { Template, Property } from '../types/types';
 import { generalSettings, incrementStat } from './storage-utils';
 import { copyToClipboard } from './clipboard-utils';
@@ -12,6 +12,14 @@ export async function generateFrontmatter(properties: Property[]): Promise<strin
 		typeMap[pt.name] = pt.type;
 	}
 	return generateFrontmatterCore(properties, typeMap);
+}
+
+export async function generateFrontmatterObject(properties: Property[]): Promise<Record<string, any>> {
+	const typeMap: Record<string, string> = {};
+	for (const pt of generalSettings.propertyTypes) {
+		typeMap[pt.name] = pt.type;
+	}
+	return generateFrontmatterObjectCore(properties, typeMap);
 }
 
 function openObsidianUrl(url: string): void {
@@ -90,5 +98,52 @@ export async function saveToObsidian(
 	} else {
 		// Try to copy to clipboard with fallback mechanisms
 		await tryClipboardWrite(fileContent, obsidianUrl);
+	}
+}
+
+export async function saveToCabinet(
+	content: string,
+	frontmatter: Record<string, any>,
+	noteName: string,
+	path: string,
+	cabinetUrl: string
+): Promise<boolean> {
+	try {
+		// Ensure path ends with a slash if provided
+		let folderPath = path.trim();
+		if (folderPath && !folderPath.endsWith('/')) {
+			folderPath += '/';
+		}
+		if (folderPath && folderPath.startsWith('/')) {
+			folderPath = folderPath.substring(1);
+		}
+
+		// The cabinet API path is /api/pages/[...path] where [...path] includes the folder and note name
+		const fullPath = `${folderPath}${sanitizeFileName(noteName)}`;
+		
+		const baseUrl = cabinetUrl.replace(/\/+$/, '');
+		const pathSegments = fullPath.split('/').map(segment => encodeURIComponent(segment));
+		const url = `${baseUrl}/api/pages/${pathSegments.join('/')}`;
+		
+		const response = await fetch(url, {
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				content,
+				frontmatter
+			}),
+		});
+
+		if (!response.ok) {
+			console.error(`Failed to save to Cabinet: ${response.status} ${response.statusText}`);
+			return false;
+		}
+		
+		return true;
+	} catch (error) {
+		console.error('Error saving to Cabinet:', error);
+		return false;
 	}
 }

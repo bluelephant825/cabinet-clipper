@@ -227,6 +227,7 @@ export function initializeGeneralSettings(): void {
 		initializeHighlighterSettings();
 		initializeExportHighlightsButton();
 		initializeSaveBehaviorDropdown();
+		initializeIntegrationsSettings();
 		await initializeUsageChart();
 
 		// Initialize feedback modal close button
@@ -426,6 +427,16 @@ function initializeHighlighterSettings(): void {
 		highlightBehaviorSelect.addEventListener('change', () => {
 			saveSettings({ ...generalSettings, highlightBehavior: highlightBehaviorSelect.value });
 		});
+	}
+}
+
+function initializeIntegrationsSettings(): void {
+	const cabinetUrlInput = document.getElementById('cabinet-url') as HTMLInputElement;
+	if (cabinetUrlInput) {
+		cabinetUrlInput.value = generalSettings.cabinetUrl || 'http://localhost:4000';
+		cabinetUrlInput.addEventListener('input', debounce(() => {
+			saveSettings({ cabinetUrl: cabinetUrlInput.value });
+		}, 500));
 	}
 }
 

@@ -22,6 +22,7 @@
 						<li data-section="highlighter"><div class="nav-item-icon"><i data-lucide="highlighter"></i></div><span data-i18n="highlighter">Highlighter</span></li>
 						<li data-section="interpreter"><div class="nav-item-icon"><i data-lucide="quote"></i></div><span data-i18n="interpreter">Interpreter</span></li>
 						<li data-section="properties"><div class="nav-item-icon"><i data-lucide="archive"></i></div><span data-i18n="properties">Properties</span></li>
+						<li data-section="integrations"><div class="nav-item-icon"><i data-lucide="link"></i></div><span data-i18n="integrations">Integrations</span></li>
 						<li class="sidebar-heading" data-i18n="templatesHeading">Templates</li>
 					</ul>
 					<button type="button" id="new-template-btn" class="mod-cta" data-i18n="newTemplate">New&nbsp;template</button>
@@ -613,6 +614,26 @@
 								</div>
 							</div>
 							
+						</form>
+					</div>
+
+					<div id="integrations-section" class="settings-section">
+						<div class="settings-section-header">
+							<h2 data-i18n="integrationsSettings">Integrations</h2>
+						</div>
+						<form id="integrations-settings-form">
+							<div class="setting-group">
+								<div class="setting-item setting-item-heading"><h3 data-i18n="cabinetIntegration">Cabinet</h3></div>
+								<div class="setting-items">
+									<div class="setting-item">
+										<div class="setting-item-info">
+											<label for="cabinet-url" data-i18n="cabinetUrl">Cabinet API URL</label>
+											<div class="setting-item-description" data-i18n="cabinetUrlDescription">The URL of your Cabinet instance.</div>
+										</div>
+										<input type="text" id="cabinet-url" placeholder="http://localhost:4000" />
+									</div>
+								</div>
+							</div>
 						</form>
 					</div>
 
