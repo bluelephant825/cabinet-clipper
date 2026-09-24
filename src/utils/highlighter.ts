@@ -12,56 +12,7 @@ import {
 import { detectBrowser, addBrowserClassToHtml } from './browser-detection';
 import dayjs from 'dayjs';
 import { generalSettings, loadSettings } from './storage-utils';
-
-/**
- * Helper function to create SVG elements
- */
-function createSVG(config: {
-	width?: string;
-	height?: string;
-	viewBox?: string;
-	className?: string;
-	paths?: string[];
-	lines?: Array<{x1: string, y1: string, x2: string, y2: string}>;
-}): SVGElement {
-	const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-	svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-	
-	if (config.width) svg.setAttribute('width', config.width);
-	if (config.height) svg.setAttribute('height', config.height);
-	if (config.viewBox) svg.setAttribute('viewBox', config.viewBox);
-	if (config.className) svg.setAttribute('class', config.className);
-	
-	// Default attributes for all SVGs
-	svg.setAttribute('fill', 'none');
-	svg.setAttribute('stroke', 'currentColor');
-	svg.setAttribute('stroke-width', '2');
-	svg.setAttribute('stroke-linecap', 'round');
-	svg.setAttribute('stroke-linejoin', 'round');
-	
-	// Add paths
-	if (config.paths) {
-		config.paths.forEach(pathData => {
-			const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-			path.setAttribute('d', pathData);
-			svg.appendChild(path);
-		});
-	}
-	
-	// Add lines
-	if (config.lines) {
-		config.lines.forEach(lineData => {
-			const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-			line.setAttribute('x1', lineData.x1);
-			line.setAttribute('y1', lineData.y1);
-			line.setAttribute('x2', lineData.x2);
-			line.setAttribute('y2', lineData.y2);
-			svg.appendChild(line);
-		});
-	}
-	
-	return svg;
-}
+import { createSVG } from './svg-utils';
 
 export type AnyHighlightData = TextHighlightData | ElementHighlightData;
 

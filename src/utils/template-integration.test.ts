@@ -18,9 +18,18 @@ import { createAsyncResolver, createSelectorProcessor } from '../api';
 // ---------------------------------------------------------------------------
 
 const FROZEN_DATE = new Date('2025-01-15T12:00:00Z');
+let originalTZ: string | undefined;
 
-beforeAll(() => { vi.useFakeTimers({ now: FROZEN_DATE }); });
-afterAll(() => { vi.useRealTimers(); });
+beforeAll(() => {
+	originalTZ = process.env.TZ;
+	process.env.TZ = 'America/Los_Angeles';
+	vi.useFakeTimers({ now: FROZEN_DATE });
+});
+
+afterAll(() => {
+	process.env.TZ = originalTZ;
+	vi.useRealTimers();
+});
 
 // ---------------------------------------------------------------------------
 // Fixture types

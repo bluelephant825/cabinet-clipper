@@ -31,6 +31,7 @@ import { saveFile } from './file-utils';
 import { parseForClip } from './clip-utils';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './iframe-resize';
 import { setElementHTML, setSVGChildren, serializeChildren } from './dom-utils';
+import { createSVG, SVGConfig } from './svg-utils';
 
 // Mobile viewport settings
 const VIEWPORT = 'width=device-width, initial-scale=1, maximum-scale=1';
@@ -76,67 +77,8 @@ export class Reader {
 	/**
 	 * Helper function to create SVG elements
 	 */
-	private static createSVG(config: {
-		width?: string;
-		height?: string;
-		viewBox?: string;
-		className?: string;
-		strokeWidth?: string;
-		paths?: string[];
-		circles?: Array<{cx: string, cy: string, r: string, fill?: string}>;
-		rects?: Array<{x: string, y: string, width: string, height: string, rx?: string, ry?: string}>;
-	}): SVGElement {
-		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-		svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-		
-		if (config.width) svg.setAttribute('width', config.width);
-		if (config.height) svg.setAttribute('height', config.height);
-		if (config.viewBox) svg.setAttribute('viewBox', config.viewBox);
-		if (config.className) svg.setAttribute('class', config.className);
-		
-		// Default attributes for all SVGs
-		svg.setAttribute('fill', 'none');
-		svg.setAttribute('stroke', 'currentColor');
-		svg.setAttribute('stroke-width', config.strokeWidth || '1.5');
-		svg.setAttribute('stroke-linecap', 'round');
-		svg.setAttribute('stroke-linejoin', 'round');
-		
-		// Add paths
-		if (config.paths) {
-			config.paths.forEach(pathData => {
-				const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-				path.setAttribute('d', pathData);
-				svg.appendChild(path);
-			});
-		}
-		
-		// Add circles
-		if (config.circles) {
-			config.circles.forEach(circleData => {
-				const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-				circle.setAttribute('cx', circleData.cx);
-				circle.setAttribute('cy', circleData.cy);
-				circle.setAttribute('r', circleData.r);
-				if (circleData.fill) circle.setAttribute('fill', circleData.fill);
-				svg.appendChild(circle);
-			});
-		}
-
-		// Add rects
-		if (config.rects) {
-			config.rects.forEach(rectData => {
-				const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-				rect.setAttribute('x', rectData.x);
-				rect.setAttribute('y', rectData.y);
-				rect.setAttribute('width', rectData.width);
-				rect.setAttribute('height', rectData.height);
-				if (rectData.rx) rect.setAttribute('rx', rectData.rx);
-				if (rectData.ry) rect.setAttribute('ry', rectData.ry);
-				svg.appendChild(rect);
-			});
-		}
-		
-		return svg;
+	private static createSVG(config: SVGConfig): SVGElement {
+		return createSVG(config);
 	}
 	private static settingsBar: HTMLElement | null = null;
 	private static fontNotice: HTMLElement | null = null;

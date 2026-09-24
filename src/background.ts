@@ -192,8 +192,22 @@ function getHighlighterModeForTab(tabId: number): boolean {
 	return highlighterModeState[tabId] ?? false;
 }
 
+function setHighlighterModeForTab(tabId: number, active: boolean): void {
+	highlighterModeState[tabId] = active;
+	if (browser.storage?.session) {
+		browser.storage.session.set({ [`hl_${tabId}`]: active }).catch(() => {});
+	}
+}
+
 function getReaderModeForTab(tabId: number): boolean {
 	return readerModeState[tabId] ?? false;
+}
+
+function setReaderModeForTab(tabId: number, active: boolean): void {
+	readerModeState[tabId] = active;
+	if (browser.storage?.session) {
+		browser.storage.session.set({ [`rm_${tabId}`]: active }).catch(() => {});
+	}
 }
 
 function isReaderPageUrl(url: string | undefined): string | null {
@@ -223,7 +237,7 @@ async function exitReaderPageIfNeeded(tabId: number, readerUrl?: string): Promis
 
 	if (originalUrl) {
 		await browser.tabs.update(tabId, { url: originalUrl });
-		readerModeState[tabId] = false;
+		setReaderModeForTab(tabId, false);
 		debouncedUpdateContextMenu(tabId);
 		return true;
 	}
@@ -232,12 +246,31 @@ async function exitReaderPageIfNeeded(tabId: number, readerUrl?: string): Promis
 
 async function initialize() {
 	try {
+		// Restore session state if service worker was restarted by browser
+		if (browser.storage?.session) {
+			try {
+				const sessionData = await browser.storage.session.get(null);
+				for (const [key, value] of Object.entries(sessionData)) {
+					if (key.startsWith('hl_')) {
+						const tabId = parseInt(key.slice(3), 10);
+						if (!isNaN(tabId)) highlighterModeState[tabId] = Boolean(value);
+					} else if (key.startsWith('rm_')) {
+						const tabId = parseInt(key.slice(3), 10);
+						if (!isNaN(tabId)) readerModeState[tabId] = Boolean(value);
+					}
+				}
+			} catch {}
+		}
+
 		// Set up tab listeners
 		await setupTabListeners();
 
 		browser.tabs.onRemoved.addListener((tabId) => {
 			delete highlighterModeState[tabId];
 			delete readerModeState[tabId];
+			if (browser.storage?.session) {
+				browser.storage.session.remove([`hl_${tabId}`, `rm_${tabId}`]).catch(() => {});
+			}
 		});
 		
 		// Initialize context menu
@@ -422,7 +455,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		if (typedRequest.action === "highlighterModeChanged" && sender.tab && typedRequest.isActive !== undefined) {
 			const tabId = sender.tab.id;
 			if (tabId) {
-				highlighterModeState[tabId] = typedRequest.isActive;
+				setHighlighterModeForTab(tabId, typedRequest.isActive);
 				sendMessageToPopup(tabId, { action: "updatePopupHighlighterUI", isActive: typedRequest.isActive });
 				debouncedUpdateContextMenu(tabId);
 			}
@@ -431,7 +464,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 		if (typedRequest.action === "readerModeChanged" && sender.tab && typedRequest.isActive !== undefined) {
 			const tabId = sender.tab.id;
 			if (tabId) {
-				readerModeState[tabId] = typedRequest.isActive;
+				setReaderModeForTab(tabId, typedRequest.isActive);
 				debouncedUpdateContextMenu(tabId);
 			}
 		}
@@ -497,7 +530,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 					browser.tabs.sendMessage(tabId, { action: "toggleReaderMode" })
 						.then((response: any) => {
 							if (response?.success) {
-								readerModeState[tabId] = response.isActive ?? false;
+								setReaderModeForTab(tabId, response.isActive ?? false);
 								debouncedUpdateContextMenu(tabId);
 							}
 							sendResponse(response);
@@ -864,7 +897,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 		await injectReaderScript(tab.id);
 		const response = await browser.tabs.sendMessage(tab.id, { action: "toggleReaderMode" }) as { success?: boolean; isActive?: boolean };
 		if (response?.success) {
-			readerModeState[tab.id] = response.isActive ?? false;
+			setReaderModeForTab(tab.id, response.isActive ?? false);
 			debouncedUpdateContextMenu(tab.id);
 		}
 	} else if (info.menuItemId === 'open-embedded' && tab && tab.id) {
@@ -946,7 +979,7 @@ async function setHighlighterMode(tabId: number, activate: boolean) {
 		await ensureContentScriptLoadedInBackground(tabId);
 
 		// Now try to send the message
-		highlighterModeState[tabId] = activate;
+		setHighlighterModeForTab(tabId, activate);
 		await browser.tabs.sendMessage(tabId, { action: "setHighlighterMode", isActive: activate });
 		debouncedUpdateContextMenu(tabId);
 		await sendMessageToPopup(tabId, { action: "updatePopupHighlighterUI", isActive: activate });
@@ -954,7 +987,7 @@ async function setHighlighterMode(tabId: number, activate: boolean) {
 	} catch (error) {
 		console.error('Error setting highlighter mode:', error);
 		// If there's an error, assume highlighter mode should be off
-		highlighterModeState[tabId] = false;
+		setHighlighterModeForTab(tabId, false);
 		debouncedUpdateContextMenu(tabId);
 		await sendMessageToPopup(tabId, { action: "updatePopupHighlighterUI", isActive: false });
 	}
@@ -964,7 +997,7 @@ async function toggleHighlighterMode(tabId: number): Promise<boolean> {
 	try {
 		const currentMode = getHighlighterModeForTab(tabId);
 		const newMode = !currentMode;
-		highlighterModeState[tabId] = newMode;
+		setHighlighterModeForTab(tabId, newMode);
 		await browser.tabs.sendMessage(tabId, { action: "setHighlighterMode", isActive: newMode });
 		debouncedUpdateContextMenu(tabId);
 		await sendMessageToPopup(tabId, { action: "updatePopupHighlighterUI", isActive: newMode });
@@ -976,7 +1009,7 @@ async function toggleHighlighterMode(tabId: number): Promise<boolean> {
 }
 
 async function highlightSelection(tabId: number, info: browser.Menus.OnClickData) {
-	highlighterModeState[tabId] = true;
+	setHighlighterModeForTab(tabId, true);
 	
 	const highlightData: Partial<TextHighlightData> = {
 		id: Date.now().toString(),
@@ -994,7 +1027,7 @@ async function highlightSelection(tabId: number, info: browser.Menus.OnClickData
 }
 
 async function highlightElement(tabId: number, info: browser.Menus.OnClickData) {
-	highlighterModeState[tabId] = true;
+	setHighlighterModeForTab(tabId, true);
 
 	await browser.tabs.sendMessage(tabId, { 
 		action: "highlightElement", 
@@ -1083,7 +1116,7 @@ browser.action.onClicked.addListener(async (tab) => {
 		await injectReaderScript(tab.id);
 		const response = await browser.tabs.sendMessage(tab.id, { action: "toggleReaderMode" }) as { success?: boolean; isActive?: boolean };
 		if (response?.success) {
-			readerModeState[tab.id] = response.isActive ?? false;
+			setReaderModeForTab(tab.id, response.isActive ?? false);
 			debouncedUpdateContextMenu(tab.id);
 		}
 	} else if (currentOpenBehavior === 'embedded') {
