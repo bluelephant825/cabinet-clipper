@@ -48,7 +48,7 @@ export let generalSettings: Settings = {
 	history: [],
 	ratings: [],
 	saveBehavior: 'addToObsidian',
-	cabinetUrl: 'http://localhost:4000'
+	cabinetUrl: ''
 };
 
 export function setLocalStorage(key: string, value: any): Promise<void> {
@@ -136,7 +136,7 @@ export async function loadSettings(): Promise<Settings> {
 		defaultPromptContext: '',
 		propertyTypes: [],
 		saveBehavior: 'addToObsidian',
-		cabinetUrl: 'http://localhost:4000',
+		cabinetUrl: '',
 		readerSettings: {
 			fontSize: 16,
 			lineHeight: 1.6,

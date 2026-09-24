@@ -101,60 +101,106 @@ export async function saveToObsidian(
 	}
 }
 
+function openCabinetUrl(url: string): void {
+	browser.runtime.sendMessage({
+		action: "openCabinetUrl",
+		url: url
+	}).catch((error) => {
+		console.error('Error opening Cabinet URL via background script:', error);
+		window.open(url, '_blank');
+	});
+}
+
 export async function saveToCabinet(
 	content: string,
 	frontmatter: Record<string, any>,
 	noteName: string,
 	path: string,
 	vault: string,
-	cabinetUrl: string
+	cabinetUrl?: string,
+	fullMarkdownContent?: string
 ): Promise<boolean> {
-	try {
-		// Ensure path ends with a slash if provided
-		let folderPath = path.trim();
-		if (vault.trim()) {
-			const vaultSegments = vault.trim().split('/');
-			if (vaultSegments.length > 1) {
-				// Drop the root cabinet name (first segment)
-				const roomPath = vaultSegments.slice(1).join('/');
-				folderPath = roomPath ? `${roomPath}/${folderPath}` : folderPath;
-			} else {
-				folderPath = `${vault.trim()}/${folderPath}`;
+	// Format folder path according to vault/room hierarchy
+	let folderPath = path.trim();
+	if (vault.trim()) {
+		const vaultSegments = vault.trim().split('/');
+		if (vaultSegments.length > 1) {
+			// Drop the root cabinet name (first segment)
+			const roomPath = vaultSegments.slice(1).join('/');
+			folderPath = roomPath ? `${roomPath}/${folderPath}` : folderPath;
+		} else {
+			folderPath = `${vault.trim()}/${folderPath}`;
+		}
+	}
+	if (folderPath && !folderPath.endsWith('/')) {
+		folderPath += '/';
+	}
+	if (folderPath && folderPath.startsWith('/')) {
+		folderPath = folderPath.substring(1);
+	}
+
+	const formattedNoteName = sanitizeFileName(noteName);
+	const fullPath = `${folderPath}${formattedNoteName}`;
+
+	// If Cabinet API URL is configured, use HTTP PUT
+	if (cabinetUrl && cabinetUrl.trim() !== '') {
+		try {
+			const baseUrl = cabinetUrl.replace(/\/+$/, '');
+			const pathSegments = fullPath.split('/').map(segment => encodeURIComponent(segment));
+			const url = `${baseUrl}/api/pages/${pathSegments.join('/')}`;
+			
+			const response = await fetch(url, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					content,
+					frontmatter
+				}),
+			});
+
+			if (!response.ok) {
+				console.error(`Failed to save to Cabinet API: ${response.status} ${response.statusText}`);
+				return false;
 			}
-		}
-		if (folderPath && !folderPath.endsWith('/')) {
-			folderPath += '/';
-		}
-		if (folderPath && folderPath.startsWith('/')) {
-			folderPath = folderPath.substring(1);
-		}
-
-		// The cabinet API path is /api/pages/[...path] where [...path] includes the folder and note name
-		const fullPath = `${folderPath}${sanitizeFileName(noteName)}`;
-		
-		const baseUrl = cabinetUrl.replace(/\/+$/, '');
-		const pathSegments = fullPath.split('/').map(segment => encodeURIComponent(segment));
-		const url = `${baseUrl}/api/pages/${pathSegments.join('/')}`;
-		
-		const response = await fetch(url, {
-			method: 'PUT',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				content,
-				frontmatter
-			}),
-		});
-
-		if (!response.ok) {
-			console.error(`Failed to save to Cabinet: ${response.status} ${response.statusText}`);
+			
+			return true;
+		} catch (error) {
+			console.error('Error saving to Cabinet API:', error);
 			return false;
 		}
-		
+	}
+
+	// Standalone Cabinet App: Save via cabinet:// protocol
+	try {
+		const noteBody = fullMarkdownContent !== undefined ? fullMarkdownContent : content;
+		const params = new URLSearchParams();
+		if (vault.trim()) {
+			params.append('vault', vault.trim());
+		}
+		if (folderPath) {
+			params.append('path', folderPath);
+		}
+		params.append('name', formattedNoteName);
+		params.append('file', fullPath);
+
+		if (generalSettings.silentOpen) {
+			params.append('silent', 'true');
+		}
+
+		const success = await copyToClipboard(noteBody);
+		if (success) {
+			params.append('clipboard', 'true');
+		} else {
+			params.append('content', noteBody);
+		}
+
+		const cabinetUri = `cabinet://new?${params.toString()}`;
+		openCabinetUrl(cabinetUri);
 		return true;
 	} catch (error) {
-		console.error('Error saving to Cabinet:', error);
+		console.error('Error saving to Cabinet via protocol:', error);
 		return false;
 	}
 }

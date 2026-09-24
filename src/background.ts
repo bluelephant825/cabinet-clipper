@@ -720,7 +720,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 			return true;
 		}
 
-		if (typedRequest.action === "openObsidianUrl") {
+		if (typedRequest.action === "openObsidianUrl" || typedRequest.action === "openCabinetUrl") {
 			const url = (typedRequest as any).url;
 			if (url) {
 				browser.tabs.query({active: true, currentWindow: true}).then((tabs) => {
@@ -729,7 +729,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 						browser.tabs.update(currentTab.id, { url: url }).then(() => {
 							sendResponse({ success: true });
 						}).catch((error) => {
-							console.error('Error opening Obsidian URL:', error);
+							console.error('Error opening URL:', error);
 							sendResponse({
 								success: false,
 								error: error instanceof Error ? error.message : String(error)
@@ -763,7 +763,8 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 			typedRequest.action === "ensureContentScriptLoaded" ||
 			typedRequest.action === "getHighlighterMode" ||
 			typedRequest.action === "toggleHighlighterMode" ||
-			typedRequest.action === "openObsidianUrl") {
+			typedRequest.action === "openObsidianUrl" ||
+			typedRequest.action === "openCabinetUrl") {
 			return true;
 		}
 	}

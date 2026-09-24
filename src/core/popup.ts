@@ -1353,15 +1353,17 @@ async function handleClipCabinet(): Promise<void> {
 		const properties = cleanProperties(rawProperties);
 
 		const frontmatterObject = await generateFrontmatterObject(properties);
+		const frontmatterYaml = await generateFrontmatter(properties);
 		const fileContent = stripPrompts(noteContentField.value);
+		const fullFileContent = frontmatterYaml ? `${frontmatterYaml}\n${fileContent}` : fileContent;
 
 		// Save to Cabinet
 		const selectedVault = vaultDropdown.value || currentTemplate.vault || '';
 		const noteName = noteNameField?.value || '';
 		const path = pathField?.value || '';
-		const cabinetUrl = generalSettings.cabinetUrl || 'http://localhost:4000';
+		const cabinetUrl = generalSettings.cabinetUrl || '';
 
-		const success = await saveToCabinet(fileContent, frontmatterObject, noteName, path, selectedVault, cabinetUrl);
+		const success = await saveToCabinet(fileContent, frontmatterObject, noteName, path, selectedVault, cabinetUrl, fullFileContent);
 		
 		if (!success) {
 			showError('failedToSaveFile');

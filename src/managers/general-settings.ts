@@ -436,9 +436,9 @@ function initializeIntegrationsSettings(): void {
 	const statusDiv = document.getElementById('connection-status') as HTMLDivElement;
 
 	if (cabinetUrlInput) {
-		cabinetUrlInput.value = generalSettings.cabinetUrl || 'http://localhost:4000';
+		cabinetUrlInput.value = generalSettings.cabinetUrl || '';
 		cabinetUrlInput.addEventListener('input', debounce(() => {
-			saveSettings({ cabinetUrl: cabinetUrlInput.value });
+			saveSettings({ cabinetUrl: cabinetUrlInput.value.trim() });
 			if (statusDiv) {
 				statusDiv.style.display = 'none';
 			}
@@ -447,6 +447,16 @@ function initializeIntegrationsSettings(): void {
 
 	if (verifyBtn && cabinetUrlInput && statusDiv) {
 		verifyBtn.addEventListener('click', async () => {
+			const enteredUrl = cabinetUrlInput.value.trim();
+			if (!enteredUrl) {
+				statusDiv.style.display = 'flex';
+				statusDiv.style.alignItems = 'center';
+				statusDiv.style.gap = '6px';
+				statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">Configured for standalone Cabinet app (cabinet:// protocol).</span>`;
+				initializeIcons(statusDiv);
+				return;
+			}
+
 			verifyBtn.disabled = true;
 			const originalText = verifyBtn.textContent || '';
 			verifyBtn.textContent = 'Verifying...';
@@ -457,7 +467,7 @@ function initializeIntegrationsSettings(): void {
 			statusDiv.innerHTML = 'Checking connection...';
 
 			try {
-				const baseUrl = cabinetUrlInput.value.replace(/\/+$/, '');
+				const baseUrl = enteredUrl.replace(/\/+$/, '');
 				const controller = new AbortController();
 				const timeoutId = setTimeout(() => controller.abort(), 5000);
 

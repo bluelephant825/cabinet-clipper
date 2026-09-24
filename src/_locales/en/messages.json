@@ -24,10 +24,10 @@
 		"message": "Cabinet"
 	},
 	"cabinetUrl": {
-		"message": "Cabinet API URL"
+		"message": "Cabinet API URL (optional)"
 	},
 	"cabinetUrlDescription": {
-		"message": "The URL of your Cabinet instance."
+		"message": "Leave blank if using the standalone Cabinet app. Specify a URL only if connecting to a remote Cabinet instance."
 	},
 	"addVaultPlaceholder": {
 		"message": "Press enter to add a vault"
