@@ -1,5 +1,5 @@
 import { generalSettings, saveSettings, getLocalStorage, setLocalStorage } from './storage-utils';
-import { PromptVariable, Template, ModelConfig } from '../types/types';
+import { PromptVariable, Template, ModelConfig, Provider } from '../types/types';
 import { compileTemplate } from './template-compiler';
 import { applyFilters } from './filters';
 import { formatDuration } from './string-utils';
@@ -140,10 +140,14 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 			};
 		} else if (provider.name.toLowerCase().includes('gemini') || provider.baseUrl.includes('generativelanguage.googleapis.com')) {
 			// Google Gemini OpenAI-compatible endpoint
-			requestUrl = provider.baseUrl;
-			if (requestUrl.includes('generativelanguage.googleapis.com') && !requestUrl.includes('/openai/')) {
-				requestUrl = requestUrl.replace('/v1beta/', '/v1beta/openai/');
+			let cleanUrl = provider.baseUrl.trim().replace(/\/+$/, '');
+			if (!cleanUrl.includes('/openai')) {
+				cleanUrl = cleanUrl.replace('/v1beta', '/v1beta/openai');
 			}
+			if (!cleanUrl.endsWith('/chat/completions')) {
+				cleanUrl = `${cleanUrl}/chat/completions`;
+			}
+			requestUrl = cleanUrl;
 			requestBody = {
 				model: model.providerModelId,
 				messages: [
@@ -768,5 +772,199 @@ async function getCachedInterpreterResponses(url: string, promptVariables: Promp
 	} catch (e) {
 		console.error('Error reading from interpreter cache:', e);
 		return null;
+	}
+}
+
+export interface ConnectionTestResult {
+	success: boolean;
+	message: string;
+	latency?: number;
+	details?: string;
+}
+
+export async function testProviderOrModelConnection(
+	provider: Provider,
+	modelId?: string
+): Promise<ConnectionTestResult> {
+	if (provider.apiKeyRequired && (!provider.apiKey || !provider.apiKey.trim())) {
+		return {
+			success: false,
+			message: `API key is required for ${provider.name}.`
+		};
+	}
+
+	const apiKey = provider.apiKey ? provider.apiKey.trim() : '';
+	const pName = provider.name.toLowerCase();
+
+	// Determine target model ID if not provided (e.g. when testing provider connection)
+	let targetModelId = modelId ? modelId.trim() : '';
+	if (!targetModelId) {
+		if (pName.includes('gemini') || provider.baseUrl.includes('generativelanguage.googleapis.com')) {
+			targetModelId = 'gemini-2.5-flash';
+		} else if (pName.includes('anthropic')) {
+			targetModelId = 'claude-3-5-haiku-latest';
+		} else if (pName.includes('deepseek')) {
+			targetModelId = 'deepseek-chat';
+		} else if (pName.includes('meta') || pName.includes('llama')) {
+			targetModelId = 'Llama-3.3-8B-Instruct';
+		} else {
+			const existingModel = generalSettings.models.find(m => m.providerId === provider.id);
+			targetModelId = existingModel?.providerModelId || 'gpt-4o-mini';
+		}
+	}
+
+	let requestUrl = provider.baseUrl.trim();
+	let headers: HeadersInit = {
+		'Content-Type': 'application/json',
+	};
+	let requestBody: any;
+
+	if (pName.includes('hugging')) {
+		requestUrl = requestUrl.replace('{model-id}', targetModelId);
+		requestBody = {
+			model: targetModelId,
+			messages: [{ role: 'user', content: 'Hi' }],
+			max_tokens: 5,
+			stream: false
+		};
+		headers = {
+			...headers,
+			'Authorization': `Bearer ${apiKey}`
+		};
+	} else if (requestUrl.includes('openai.azure.com')) {
+		requestBody = {
+			messages: [{ role: 'user', content: 'Hi' }],
+			max_tokens: 5,
+			stream: false
+		};
+		headers = {
+			...headers,
+			'api-key': apiKey
+		};
+	} else if (pName.includes('anthropic')) {
+		requestBody = {
+			model: targetModelId,
+			max_tokens: 5,
+			messages: [{ role: 'user', content: 'Hi' }],
+			system: 'Respond with OK.'
+		};
+		headers = {
+			...headers,
+			'x-api-key': apiKey,
+			'anthropic-version': '2023-06-01',
+			'anthropic-dangerous-direct-browser-access': 'true'
+		};
+	} else if (pName.includes('gemini') || requestUrl.includes('generativelanguage.googleapis.com')) {
+		let cleanUrl = requestUrl.replace(/\/+$/, '');
+		if (!cleanUrl.includes('/openai')) {
+			cleanUrl = cleanUrl.replace('/v1beta', '/v1beta/openai');
+		}
+		if (!cleanUrl.endsWith('/chat/completions')) {
+			cleanUrl = `${cleanUrl}/chat/completions`;
+		}
+		requestUrl = cleanUrl;
+		requestBody = {
+			model: targetModelId,
+			messages: [{ role: 'user', content: 'Hi' }],
+			max_tokens: 5
+		};
+		headers = {
+			...headers,
+			'Authorization': `Bearer ${apiKey}`,
+			'x-goog-api-key': apiKey
+		};
+	} else if (pName.includes('ollama')) {
+		requestBody = {
+			model: targetModelId,
+			messages: [{ role: 'user', content: 'Hi' }],
+			stream: false
+		};
+	} else {
+		requestBody = {
+			model: targetModelId,
+			messages: [{ role: 'user', content: 'Hi' }],
+			max_tokens: 5
+		};
+		headers = {
+			...headers,
+			'Authorization': `Bearer ${apiKey}`
+		};
+	}
+
+	const startTime = performance.now();
+	try {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+		const response = await fetch(requestUrl, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify(requestBody),
+			signal: controller.signal
+		});
+		clearTimeout(timeoutId);
+
+		const latency = Math.round(performance.now() - startTime);
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			let detail = '';
+			try {
+				const errJson = JSON.parse(errorText);
+				detail = errJson.error?.message || errJson.message || errorText;
+			} catch {
+				detail = errorText;
+			}
+
+			if (response.status === 401) {
+				if (pName.includes('gemini') || requestUrl.includes('generativelanguage.googleapis.com')) {
+					return {
+						success: false,
+						message: 'Authentication failed (401). Check your API key at https://aistudio.google.com/apikey',
+						latency,
+						details: detail
+					};
+				}
+				return {
+					success: false,
+					message: `Authentication failed (401). Invalid API key for ${provider.name}.`,
+					latency,
+					details: detail
+				};
+			}
+
+			if (response.status === 404) {
+				const isSpecificModelTest = Boolean(modelId);
+				return {
+					success: false,
+					message: isSpecificModelTest
+						? `Model "${targetModelId}" not found (404). Please verify that this Model ID exists on ${provider.name}.`
+						: `Endpoint or test model "${targetModelId}" not found (404). Check Base URL.`,
+					latency,
+					details: detail
+				};
+			}
+
+			return {
+				success: false,
+				message: `Error ${response.status}: ${detail.slice(0, 150)}`,
+				latency,
+				details: detail
+			};
+		}
+
+		return {
+			success: true,
+			message: `Connected successfully (${latency}ms) using "${targetModelId}"`,
+			latency
+		};
+	} catch (error: any) {
+		const latency = Math.round(performance.now() - startTime);
+		const msg = error.name === 'AbortError' ? 'Connection timed out after 15s.' : (error.message || 'Network error');
+		return {
+			success: false,
+			message: msg,
+			latency
+		};
 	}
 }

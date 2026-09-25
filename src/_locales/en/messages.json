@@ -32,6 +32,9 @@
 	"addVaultPlaceholder": {
 		"message": "Press enter to add a vault"
 	},
+	"testConnection": {
+		"message": "Test connection"
+	},
 	"advanced": {
 		"message": "Advanced"
 	},

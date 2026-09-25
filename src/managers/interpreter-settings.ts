@@ -5,6 +5,7 @@ import { initializeIcons } from '../icons/icons';
 import { showModal, hideModal } from '../utils/modal-utils';
 import { getMessage, translatePage } from '../utils/i18n';
 import { debugLog } from '../utils/debug';
+import { testProviderOrModelConnection } from '../utils/interpreter';
 
 export interface PresetProvider {
 	id: string;
@@ -361,6 +362,16 @@ function createProviderListItem(provider: Provider, index: number): HTMLElement 
 	const providerListItemActions = document.createElement('div');
 	providerListItemActions.className = 'provider-list-item-actions';
 	
+	// Create test button
+	const testProviderBtn = document.createElement('button');
+	testProviderBtn.className = 'test-provider-btn clickable-icon';
+	testProviderBtn.setAttribute('data-provider-id', provider.id);
+	testProviderBtn.setAttribute('aria-label', getMessage('testConnection'));
+	testProviderBtn.title = getMessage('testConnection');
+	const testIcon = document.createElement('i');
+	testIcon.setAttribute('data-lucide', 'play');
+	testProviderBtn.appendChild(testIcon);
+
 	// Create edit button
 	const editProviderBtn = document.createElement('button');
 	editProviderBtn.className = 'edit-provider-btn clickable-icon';
@@ -379,12 +390,48 @@ function createProviderListItem(provider: Provider, index: number): HTMLElement 
 	deleteIcon.setAttribute('data-lucide', 'trash-2');
 	deleteProviderBtn.appendChild(deleteIcon);
 	
+	providerListItemActions.appendChild(testProviderBtn);
 	providerListItemActions.appendChild(editProviderBtn);
 	providerListItemActions.appendChild(deleteProviderBtn);
 	
 	// Assemble provider item
 	providerItem.appendChild(providerListItemInfo);
 	providerItem.appendChild(providerListItemActions);
+
+	testProviderBtn.addEventListener('click', async (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		testProviderBtn.disabled = true;
+		testIcon.setAttribute('data-lucide', 'rotate-cw');
+		initializeIcons(testProviderBtn);
+
+		let statusSpan = providerListItemInfo.querySelector('.provider-test-status') as HTMLElement;
+		if (!statusSpan) {
+			statusSpan = document.createElement('span');
+			statusSpan.className = 'provider-test-status';
+			statusSpan.style.display = 'inline-flex';
+			statusSpan.style.alignItems = 'center';
+			statusSpan.style.gap = '4px';
+			statusSpan.style.fontSize = 'var(--font-ui-smaller)';
+			providerListItemInfo.appendChild(statusSpan);
+		}
+		statusSpan.style.display = 'inline-flex';
+		statusSpan.innerHTML = '<span style="color: var(--text-muted);">Testing...</span>';
+
+		const result = await testProviderOrModelConnection(provider);
+
+		if (result.success) {
+			statusSpan.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">${result.latency}ms</span>`;
+			statusSpan.title = result.message;
+		} else {
+			statusSpan.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">${result.message}</span>`;
+			statusSpan.title = result.details || result.message;
+		}
+		initializeIcons(statusSpan);
+		testIcon.setAttribute('data-lucide', 'play');
+		initializeIcons(testProviderBtn);
+		testProviderBtn.disabled = false;
+	});
 
 	// Add event listeners using direct element references
 	editProviderBtn.addEventListener('click', (e) => {
@@ -586,15 +633,84 @@ async function showProviderModal(provider: Provider, index?: number) {
 
 	const confirmBtn = modal.querySelector('.provider-confirm-btn');
 	const cancelBtn = modal.querySelector('.provider-cancel-btn');
+	const testBtn = modal.querySelector('#test-provider-btn') as HTMLButtonElement | null;
+	const statusDiv = modal.querySelector('#provider-test-status') as HTMLElement | null;
 
 	const newConfirmBtn = confirmBtn?.cloneNode(true);
 	const newCancelBtn = cancelBtn?.cloneNode(true);
+	const newTestBtn = testBtn?.cloneNode(true) as HTMLButtonElement | null;
+
 	if (confirmBtn && newConfirmBtn) {
 		confirmBtn.parentNode?.replaceChild(newConfirmBtn, confirmBtn);
 	}
 	if (cancelBtn && newCancelBtn) {
 		cancelBtn.parentNode?.replaceChild(newCancelBtn, cancelBtn);
 	}
+	if (testBtn && newTestBtn) {
+		testBtn.parentNode?.replaceChild(newTestBtn, testBtn);
+	}
+	if (statusDiv) {
+		statusDiv.style.display = 'none';
+		statusDiv.textContent = '';
+	}
+
+	newTestBtn?.addEventListener('click', async () => {
+		const formData = new FormData(form);
+		const name = (formData.get('name') as string)?.trim() || provider.name || 'Provider';
+		let baseUrl = (formData.get('baseUrl') as string)?.trim() || provider.baseUrl;
+		const apiKey = (formData.get('apiKey') as string)?.trim() || provider.apiKey;
+		const presetId = (form.querySelector('[name="preset"]') as HTMLSelectElement)?.value;
+
+		if (presetId && cachedPresetProviders && cachedPresetProviders[presetId]) {
+			const providerPreset = cachedPresetProviders[presetId];
+			if (!baseUrl || baseUrl === providerPreset.baseUrl) {
+				baseUrl = providerPreset.baseUrl;
+			}
+		}
+
+		if (!baseUrl) {
+			if (statusDiv) {
+				statusDiv.style.display = 'flex';
+				statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Base URL is required to test.</span>`;
+				initializeIcons(statusDiv);
+			}
+			return;
+		}
+
+		newTestBtn.disabled = true;
+		const originalText = newTestBtn.textContent || '';
+		newTestBtn.textContent = 'Testing...';
+
+		if (statusDiv) {
+			statusDiv.style.display = 'flex';
+			statusDiv.style.alignItems = 'center';
+			statusDiv.style.gap = '6px';
+			statusDiv.innerHTML = `<i data-lucide="rotate-cw"></i> <span>Testing connection...</span>`;
+			initializeIcons(statusDiv);
+		}
+
+		const testProvider: Provider = {
+			id: provider.id || Date.now().toString(),
+			name,
+			baseUrl,
+			apiKey,
+			apiKeyRequired: true
+		};
+
+		const result = await testProviderOrModelConnection(testProvider);
+
+		if (statusDiv) {
+			if (result.success) {
+				statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">${result.message}</span>`;
+			} else {
+				statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">${result.message}</span>`;
+			}
+			initializeIcons(statusDiv);
+		}
+
+		newTestBtn.disabled = false;
+		newTestBtn.textContent = originalText;
+	});
 
 	newConfirmBtn?.addEventListener('click', async () => {
 		const formData = new FormData(form);
@@ -721,6 +837,16 @@ function createModelListItem(model: ModelConfig, index: number): HTMLElement {
 	const modelListItemActions = document.createElement('div');
 	modelListItemActions.className = 'model-list-item-actions';
 	
+	// Create test button
+	const testModelBtn = document.createElement('button');
+	testModelBtn.className = 'test-model-btn clickable-icon';
+	testModelBtn.setAttribute('data-model-id', model.id);
+	testModelBtn.setAttribute('aria-label', getMessage('testConnection'));
+	testModelBtn.title = getMessage('testConnection');
+	const testIcon = document.createElement('i');
+	testIcon.setAttribute('data-lucide', 'play');
+	testModelBtn.appendChild(testIcon);
+
 	// Create edit button
 	const editModelBtn = document.createElement('button');
 	editModelBtn.className = 'edit-model-btn clickable-icon';
@@ -758,6 +884,7 @@ function createModelListItem(model: ModelConfig, index: number): HTMLElement {
 	checkboxContainer.appendChild(checkbox);
 	
 	// Assemble actions
+	modelListItemActions.appendChild(testModelBtn);
 	modelListItemActions.appendChild(editModelBtn);
 	modelListItemActions.appendChild(duplicateModelBtn);
 	modelListItemActions.appendChild(deleteModelBtn);
@@ -767,6 +894,47 @@ function createModelListItem(model: ModelConfig, index: number): HTMLElement {
 	modelItem.appendChild(dragHandle);
 	modelItem.appendChild(modelListItemInfo);
 	modelItem.appendChild(modelListItemActions);
+
+	testModelBtn.addEventListener('click', async (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		const targetProvider = generalSettings.providers.find(p => p.id === model.providerId);
+		if (!targetProvider) {
+			alert('No provider found for this model.');
+			return;
+		}
+
+		testModelBtn.disabled = true;
+		testIcon.setAttribute('data-lucide', 'rotate-cw');
+		initializeIcons(testModelBtn);
+
+		let statusSpan = modelListItemInfo.querySelector('.model-test-status') as HTMLElement;
+		if (!statusSpan) {
+			statusSpan = document.createElement('span');
+			statusSpan.className = 'model-test-status';
+			statusSpan.style.display = 'inline-flex';
+			statusSpan.style.alignItems = 'center';
+			statusSpan.style.gap = '4px';
+			statusSpan.style.fontSize = 'var(--font-ui-smaller)';
+			modelListItemInfo.appendChild(statusSpan);
+		}
+		statusSpan.style.display = 'inline-flex';
+		statusSpan.innerHTML = '<span style="color: var(--text-muted);">Testing...</span>';
+
+		const result = await testProviderOrModelConnection(targetProvider, model.providerModelId);
+
+		if (result.success) {
+			statusSpan.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">${result.latency}ms</span>`;
+			statusSpan.title = result.message;
+		} else {
+			statusSpan.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">${result.message}</span>`;
+			statusSpan.title = result.details || result.message;
+		}
+		initializeIcons(statusSpan);
+		testIcon.setAttribute('data-lucide', 'play');
+		initializeIcons(testModelBtn);
+		testModelBtn.disabled = false;
+	});
 
 	// Add event listeners using direct element references
 	initializeToggles(modelItem);
@@ -1031,6 +1199,8 @@ async function showModelModal(model: ModelConfig, index?: number) {
 
 		const confirmBtn = modal.querySelector('.model-confirm-btn');
 		const cancelBtn = modal.querySelector('.model-cancel-btn');
+		const testBtn = modal.querySelector('#test-model-btn') as HTMLButtonElement | null;
+		const statusDiv = modal.querySelector('#model-test-status') as HTMLDivElement | null;
 
 		if (!confirmBtn || !cancelBtn) {
 			console.error('Modal buttons not found');
@@ -1039,8 +1209,68 @@ async function showModelModal(model: ModelConfig, index?: number) {
 
 		const newConfirmBtn = confirmBtn.cloneNode(true);
 		const newCancelBtn = cancelBtn.cloneNode(true);
+		const newTestBtn = testBtn ? (testBtn.cloneNode(true) as HTMLButtonElement) : null;
+
 		confirmBtn.parentNode?.replaceChild(newConfirmBtn, confirmBtn);
 		cancelBtn.parentNode?.replaceChild(newCancelBtn, cancelBtn);
+		if (testBtn && newTestBtn) {
+			testBtn.parentNode?.replaceChild(newTestBtn, testBtn);
+		}
+		if (statusDiv) {
+			statusDiv.style.display = 'none';
+			statusDiv.textContent = '';
+		}
+
+		newTestBtn?.addEventListener('click', async () => {
+			const formData = new FormData(form);
+			const selectedProviderId = (formData.get('providerId') as string)?.trim();
+			const providerModelId = (formData.get('providerModelId') as string)?.trim();
+			const provider = generalSettings.providers.find(p => p.id === selectedProviderId);
+
+			if (!selectedProviderId || !provider) {
+				if (statusDiv) {
+					statusDiv.style.display = 'flex';
+					statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">${getMessage('selectProvider')}</span>`;
+					initializeIcons(statusDiv);
+				}
+				return;
+			}
+
+			if (!providerModelId) {
+				if (statusDiv) {
+					statusDiv.style.display = 'flex';
+					statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Model ID is required to test.</span>`;
+					initializeIcons(statusDiv);
+				}
+				return;
+			}
+
+			newTestBtn.disabled = true;
+			const originalText = newTestBtn.textContent || '';
+			newTestBtn.textContent = 'Testing...';
+
+			if (statusDiv) {
+				statusDiv.style.display = 'flex';
+				statusDiv.style.alignItems = 'center';
+				statusDiv.style.gap = '6px';
+				statusDiv.innerHTML = `<i data-lucide="rotate-cw"></i> <span>Testing connection...</span>`;
+				initializeIcons(statusDiv);
+			}
+
+			const result = await testProviderOrModelConnection(provider, providerModelId);
+
+			if (statusDiv) {
+				if (result.success) {
+					statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">${result.message}</span>`;
+				} else {
+					statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">${result.message}</span>`;
+				}
+				initializeIcons(statusDiv);
+			}
+
+			newTestBtn.disabled = false;
+			newTestBtn.textContent = originalText;
+		});
 
 		newConfirmBtn.addEventListener('click', async () => {
 			const formData = new FormData(form);

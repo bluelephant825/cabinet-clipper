@@ -841,10 +841,11 @@
 								<input type="text" id="provider-model-id" name="providerModelId" data-i18n="providerModelId" placeholder="Model ID" required>
 							</div>
 						</div>
-						
+						<div id="model-test-status" style="margin-top: 8px; display: none; align-items: center; gap: 6px; font-size: var(--font-ui-smaller);"></div>
 					</form>
 				</div>
 				<div class="modal-button-container">
+					<button type="button" id="test-model-btn" class="btn" style="margin-right: auto;" data-i18n="testConnection">Test connection</button>
 					<button class="model-confirm-btn mod-cta" data-i18n="save">Save</button>
 					<button class="model-cancel-btn" data-i18n="cancel">Cancel</button>
 				</div>
@@ -899,9 +900,11 @@
 								<input type="text" id="provider-api-key" name="apiKey" data-i18n="providerApiKey" placeholder="API key">
 							</div>
 						</div>
+						<div id="provider-test-status" style="margin-top: 8px; display: none; align-items: center; gap: 6px; font-size: var(--font-ui-smaller);"></div>
 					</form>
 				</div>
 				<div class="modal-button-container">
+					<button type="button" id="test-provider-btn" class="btn" style="margin-right: auto;" data-i18n="testConnection">Test connection</button>
 					<button class="provider-confirm-btn mod-cta" data-i18n="save">Save</button>
 					<button class="provider-cancel-btn" data-i18n="cancel">Cancel</button>
 				</div>

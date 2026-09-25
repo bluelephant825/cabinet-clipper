@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { sendToLLM, resetLastRequestTime } from './interpreter';
+import { sendToLLM, resetLastRequestTime, testProviderOrModelConnection } from './interpreter';
 import { generalSettings } from './storage-utils';
 
 describe('sendToLLM with Google Gemini', () => {
@@ -108,3 +108,84 @@ describe('sendToLLM with Google Gemini', () => {
 		);
 	});
 });
+
+describe('testProviderOrModelConnection', () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	test('fails early if required API key is missing', async () => {
+		const result = await testProviderOrModelConnection({
+			id: 'gemini',
+			name: 'Google Gemini',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			apiKey: '',
+			apiKeyRequired: true
+		});
+
+		expect(result.success).toBe(false);
+		expect(result.message).toContain('API key is required');
+	});
+
+	test('successfully tests connection and measures latency', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			text: async () => JSON.stringify({
+				choices: [{ message: { content: 'OK' } }]
+			})
+		});
+		global.fetch = mockFetch;
+
+		const result = await testProviderOrModelConnection({
+			id: 'gemini',
+			name: 'Google Gemini',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			apiKey: 'valid-gemini-key',
+			apiKeyRequired: true
+		}, 'gemini-2.5-flash');
+
+		expect(result.success).toBe(true);
+		expect(result.message).toContain('Connected successfully');
+		expect(result.latency).toBeDefined();
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+
+		const [url, options] = mockFetch.mock.calls[0];
+		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+		expect(options.headers['x-goog-api-key']).toBe('valid-gemini-key');
+		const body = JSON.parse(options.body);
+		expect(body.model).toBe('gemini-2.5-flash');
+	});
+
+	test('returns informative error on 401 authentication failure', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 401,
+			statusText: 'Unauthorized',
+			text: async () => JSON.stringify({
+				error: {
+					code: 401,
+					message: 'Request had invalid authentication credentials.',
+					status: 'UNAUTHENTICATED'
+				}
+			})
+		});
+		global.fetch = mockFetch;
+
+		const result = await testProviderOrModelConnection({
+			id: 'gemini',
+			name: 'Google Gemini',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			apiKey: 'bad-key',
+			apiKeyRequired: true
+		});
+
+		expect(result.success).toBe(false);
+		expect(result.message).toContain('Authentication failed (401)');
+		expect(result.message).toContain('aistudio.google.com/apikey');
+	});
+});
+
