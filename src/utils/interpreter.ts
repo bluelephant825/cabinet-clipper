@@ -944,24 +944,45 @@ export async function testProviderOrModelConnection(
 			'anthropic-dangerous-direct-browser-access': 'true'
 		};
 	} else if (pName.includes('gemini') || requestUrl.includes('generativelanguage.googleapis.com')) {
-		let cleanUrl = requestUrl.replace(/\/+$/, '');
-		if (!cleanUrl.includes('/openai')) {
-			cleanUrl = cleanUrl.replace('/v1beta', '/v1beta/openai');
+		if (requestUrl.includes('{model-id}')) {
+			requestUrl = requestUrl.replace('{model-id}', targetModelId);
+		} else if (!requestUrl.includes(':generateContent') && !requestUrl.includes('/openai')) {
+			requestUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModelId}:generateContent`;
 		}
-		if (!cleanUrl.endsWith('/chat/completions')) {
-			cleanUrl = `${cleanUrl}/chat/completions`;
+
+		if (requestUrl.includes(':generateContent')) {
+			requestBody = {
+				contents: [
+					{
+						role: 'user',
+						parts: [{ text: 'Hi' }]
+					}
+				],
+				generationConfig: {
+					maxOutputTokens: 5
+				}
+			};
+			headers = {
+				...headers,
+				'x-goog-api-key': apiKey
+			};
+		} else {
+			let cleanUrl = requestUrl.replace(/\/+$/, '');
+			if (!cleanUrl.endsWith('/chat/completions')) {
+				cleanUrl = `${cleanUrl}/chat/completions`;
+			}
+			requestUrl = cleanUrl;
+			requestBody = {
+				model: targetModelId,
+				messages: [{ role: 'user', content: 'Hi' }],
+				max_tokens: 5
+			};
+			headers = {
+				...headers,
+				'Authorization': `Bearer ${apiKey}`,
+				'x-goog-api-key': apiKey
+			};
 		}
-		requestUrl = cleanUrl;
-		requestBody = {
-			model: targetModelId,
-			messages: [{ role: 'user', content: 'Hi' }],
-			max_tokens: 5
-		};
-		headers = {
-			...headers,
-			'Authorization': `Bearer ${apiKey}`,
-			'x-goog-api-key': apiKey
-		};
 	} else if (pName.includes('ollama')) {
 		requestBody = {
 			model: targetModelId,

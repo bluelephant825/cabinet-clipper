@@ -208,12 +208,14 @@ export async function initializeInterpreterSettings(): Promise<void> {
 			generalSettings.providers = [];
 		}
 
-		// Auto-migrate any existing Google Gemini provider baseUrl missing /openai/
+		// Auto-migrate any existing Google Gemini provider baseUrl to the native generateContent format
 		let providersUpdated = false;
 		for (const provider of generalSettings.providers) {
-			if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
-				provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
-				providersUpdated = true;
+			if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com')) {
+				if (!provider.baseUrl.includes('{model-id}') || provider.baseUrl.includes('/openai/')) {
+					provider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
+					providersUpdated = true;
+				}
 			}
 		}
 		if (providersUpdated) {

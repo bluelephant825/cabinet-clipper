@@ -13,28 +13,32 @@ describe('sendToLLM with Google Gemini', () => {
 		resetLastRequestTime();
 	});
 
-	test('normalizes baseUrl to /v1beta/openai/ and attaches x-goog-api-key', async () => {
+	test('targets native generateContent endpoint and attaches X-goog-api-key', async () => {
 		generalSettings.providers = [
 			{
 				id: 'google-gemini',
 				name: 'Google Gemini',
 				apiKey: 'test-gemini-key',
 				apiKeyRequired: true,
-				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/chat/completions',
+				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent',
 			}
 		];
 
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			text: async () => JSON.stringify({
-				choices: [
+				candidates: [
 					{
-						message: {
-							content: JSON.stringify({
-								prompts_responses: {
-									prompt_1: 'Summary of the page'
+						content: {
+							parts: [
+								{
+									text: JSON.stringify({
+										prompts_responses: {
+											prompt_1: 'Summary of the page'
+										}
+									})
 								}
-							})
+							]
 						}
 					}
 				]
@@ -58,9 +62,8 @@ describe('sendToLLM with Google Gemini', () => {
 
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 		const [url, options] = mockFetch.mock.calls[0];
-		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
-		expect(options.headers['Authorization']).toBe('Bearer test-gemini-key');
-		expect(options.headers['x-goog-api-key']).toBe('test-gemini-key');
+		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+		expect(options.headers['X-goog-api-key']).toBe('test-gemini-key');
 		expect(result.promptResponses).toEqual([
 			{ key: 'prompt_1', prompt: 'Summarize this page', user_response: 'Summary of the page' }
 		]);
@@ -73,7 +76,7 @@ describe('sendToLLM with Google Gemini', () => {
 				name: 'Google Gemini',
 				apiKey: 'invalid-key',
 				apiKeyRequired: true,
-				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+				baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent',
 			}
 		];
 
@@ -122,7 +125,7 @@ describe('testProviderOrModelConnection', () => {
 		const result = await testProviderOrModelConnection({
 			id: 'gemini',
 			name: 'Google Gemini',
-			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent',
 			apiKey: '',
 			apiKeyRequired: true
 		});
@@ -131,11 +134,11 @@ describe('testProviderOrModelConnection', () => {
 		expect(result.message).toContain('API key is required');
 	});
 
-	test('successfully tests connection and measures latency', async () => {
+	test('successfully tests connection and measures latency with native Gemini endpoint', async () => {
 		const mockFetch = vi.fn().mockResolvedValue({
 			ok: true,
 			text: async () => JSON.stringify({
-				choices: [{ message: { content: 'OK' } }]
+				candidates: [{ content: { parts: [{ text: 'OK' }] } }]
 			})
 		});
 		global.fetch = mockFetch;
@@ -143,7 +146,7 @@ describe('testProviderOrModelConnection', () => {
 		const result = await testProviderOrModelConnection({
 			id: 'gemini',
 			name: 'Google Gemini',
-			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent',
 			apiKey: 'valid-gemini-key',
 			apiKeyRequired: true
 		}, 'gemini-2.5-flash');
@@ -154,10 +157,8 @@ describe('testProviderOrModelConnection', () => {
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 
 		const [url, options] = mockFetch.mock.calls[0];
-		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
 		expect(options.headers['x-goog-api-key']).toBe('valid-gemini-key');
-		const body = JSON.parse(options.body);
-		expect(body.model).toBe('gemini-2.5-flash');
 	});
 
 	test('returns informative error on 401 authentication failure', async () => {
@@ -178,7 +179,7 @@ describe('testProviderOrModelConnection', () => {
 		const result = await testProviderOrModelConnection({
 			id: 'gemini',
 			name: 'Google Gemini',
-			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent',
 			apiKey: 'bad-key',
 			apiKeyRequired: true
 		});
