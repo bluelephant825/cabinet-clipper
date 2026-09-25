@@ -1188,6 +1188,7 @@ async function openPopup(): Promise<void> {
 browser.action.onClicked.addListener(async (tab) => {
 	if (!tab?.id || !tab.url || !isValidUrl(tab.url) || isBlankPage(tab.url)) return;
 
+	if (currentOpenBehavior === 'reader') {
 		await toggleReaderModeInTab(tab.id);
 	} else if (currentOpenBehavior === 'embedded') {
 		await sendMessageToContentScript(tab.id, { action: "toggle-iframe" });
