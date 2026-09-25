@@ -188,5 +188,27 @@ describe('testProviderOrModelConnection', () => {
 		expect(result.message).toContain('Authentication failed (401)');
 		expect(result.message).toContain('aistudio.google.com/apikey');
 	});
+
+	test('automatically strips corrupted /openai/ from Gemini baseUrl', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			text: async () => JSON.stringify({
+				candidates: [{ content: { parts: [{ text: 'OK' }] } }]
+			})
+		});
+		global.fetch = mockFetch;
+
+		const result = await testProviderOrModelConnection({
+			id: 'gemini',
+			name: 'Google Gemini',
+			baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/models/{model-id}:generateContent',
+			apiKey: 'valid-gemini-key',
+			apiKeyRequired: true
+		}, 'gemini-2.5-flash');
+
+		expect(result.success).toBe(true);
+		const [url] = mockFetch.mock.calls[0];
+		expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+	});
 });
 

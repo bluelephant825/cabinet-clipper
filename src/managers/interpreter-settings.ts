@@ -569,6 +569,11 @@ async function showProviderModal(provider: Provider, index?: number) {
 
 		let currentPresetId: string | null = null;
 		if (index !== undefined) {
+			if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com')) {
+				if (provider.baseUrl.includes('/openai/') || !provider.baseUrl.includes('{model-id}')) {
+					provider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
+				}
+			}
 			nameInput.value = provider.name;
 			baseUrlInput.value = provider.baseUrl;
 			apiKeyInput.value = provider.apiKey;
@@ -597,7 +602,11 @@ async function showProviderModal(provider: Provider, index?: number) {
 				nameInput.value = selectedPreset.name;
 				
 				const editingOriginalPreset = index !== undefined && selectedPresetId === currentPresetId;
-				baseUrlInput.value = editingOriginalPreset ? provider.baseUrl : selectedPreset.baseUrl;
+				let initialBaseUrl = editingOriginalPreset ? provider.baseUrl : selectedPreset.baseUrl;
+				if (selectedPreset.baseUrl.includes('generativelanguage.googleapis.com') && initialBaseUrl.includes('/openai/')) {
+					initialBaseUrl = selectedPreset.baseUrl;
+				}
+				baseUrlInput.value = initialBaseUrl;
 				apiKeyInput.value = editingOriginalPreset ? provider.apiKey : '';
 
 				apiKeyContainer.style.display = selectedPreset.apiKeyRequired === false ? 'none' : 'block';
@@ -670,6 +679,12 @@ async function showProviderModal(provider: Provider, index?: number) {
 			}
 		}
 
+		if (baseUrl.includes('generativelanguage.googleapis.com') && (baseUrl.includes('/openai/') || !baseUrl.includes('{model-id}'))) {
+			baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
+			const baseUrlEl = form.querySelector('[name="baseUrl"]') as HTMLInputElement;
+			if (baseUrlEl) baseUrlEl.value = baseUrl;
+		}
+
 		if (!baseUrl) {
 			if (statusDiv) {
 				statusDiv.style.display = 'flex';
@@ -717,7 +732,7 @@ async function showProviderModal(provider: Provider, index?: number) {
 	newConfirmBtn?.addEventListener('click', async () => {
 		const formData = new FormData(form);
 		const name = formData.get('name') as string;
-		const baseUrl = formData.get('baseUrl') as string;
+		let baseUrl = formData.get('baseUrl') as string;
 		const apiKey = formData.get('apiKey') as string;
 		const presetId = (form.querySelector('[name="preset"]') as HTMLSelectElement).value;
 		
@@ -745,6 +760,10 @@ async function showProviderModal(provider: Provider, index?: number) {
 			// Use the user-provided baseUrl if it's different from the preset baseUrl
 			updatedProvider.baseUrl = baseUrl !== providerPresetBaseUrl ? baseUrl : providerPresetBaseUrl;
 			updatedProvider.apiKeyRequired = providerPreset.apiKeyRequired !== false;
+		}
+
+		if (updatedProvider.baseUrl.includes('generativelanguage.googleapis.com') && (updatedProvider.baseUrl.includes('/openai/') || !updatedProvider.baseUrl.includes('{model-id}'))) {
+			updatedProvider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
 		}
 
 		if (index !== undefined) {

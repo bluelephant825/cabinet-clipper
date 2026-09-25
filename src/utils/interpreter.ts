@@ -110,8 +110,9 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 		} else if (provider.baseUrl.includes('generativelanguage.googleapis.com')) {
 			// Use the native Gemini API — Google's OpenAI-compatible endpoint
 			// rejects the newer AQ-prefixed API keys
-			requestUrl = provider.baseUrl.includes('{model-id}')
-				? provider.baseUrl.replace('{model-id}', model.providerModelId)
+			let cleanUrl = provider.baseUrl.replace('/openai/models/', '/models/').replace('/openai/', '/');
+			requestUrl = cleanUrl.includes('{model-id}')
+				? cleanUrl.replace('{model-id}', model.providerModelId)
 				: `https://generativelanguage.googleapis.com/v1beta/models/${model.providerModelId}:generateContent`;
 			requestBody = {
 				systemInstruction: { parts: [{ text: systemContent }] },
@@ -944,6 +945,9 @@ export async function testProviderOrModelConnection(
 			'anthropic-dangerous-direct-browser-access': 'true'
 		};
 	} else if (pName.includes('gemini') || requestUrl.includes('generativelanguage.googleapis.com')) {
+		if (requestUrl.includes('generativelanguage.googleapis.com')) {
+			requestUrl = requestUrl.replace('/openai/models/', '/models/').replace('/openai/', '/');
+		}
 		if (requestUrl.includes('{model-id}')) {
 			requestUrl = requestUrl.replace('{model-id}', targetModelId);
 		} else if (!requestUrl.includes(':generateContent') && !requestUrl.includes('/openai')) {
