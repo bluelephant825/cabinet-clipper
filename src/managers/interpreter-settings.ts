@@ -54,6 +54,9 @@ async function fetchPresetProviders(): Promise<Record<string, PresetProvider>> {
 			if (key !== 'version' && Object.prototype.hasOwnProperty.call(data, key)) {
 				const provider = data[key] as PresetProvider;
 				provider.id = key;
+				if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
+					provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
+				}
 				providers[key] = provider;
 			}
 		}
@@ -76,6 +79,9 @@ async function getLocalPresets(): Promise<Record<string, PresetProvider> | null>
 			if (key !== 'version' && Object.prototype.hasOwnProperty.call(data, key)) {
 				const provider = data[key] as PresetProvider;
 				provider.id = key;
+				if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
+					provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
+				}
 				providers[key] = provider;
 			}
 		}
@@ -199,6 +205,18 @@ export async function initializeInterpreterSettings(): Promise<void> {
 		if (!Array.isArray(generalSettings.providers)) {
 			console.warn('Invalid providers data, resetting to empty array');
 			generalSettings.providers = [];
+		}
+
+		// Auto-migrate any existing Google Gemini provider baseUrl missing /openai/
+		let providersUpdated = false;
+		for (const provider of generalSettings.providers) {
+			if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
+				provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
+				providersUpdated = true;
+			}
+		}
+		if (providersUpdated) {
+			await saveSettings({ providers: generalSettings.providers });
 		}
 
 		cachedPresetProviders = await getPresetProviders();

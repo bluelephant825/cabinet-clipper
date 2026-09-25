@@ -11,6 +11,10 @@ import { updateTokenCount } from './token-counter';
 const RATE_LIMIT_RESET_TIME = 60000; // 1 minute in milliseconds
 let lastRequestTime = 0;
 
+export function resetLastRequestTime(): void {
+	lastRequestTime = 0;
+}
+
 // Store event listeners for cleanup
 const eventListeners = new WeakMap<HTMLElement, { [key: string]: EventListener }>();
 
@@ -134,6 +138,27 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 				temperature: 0.5,
 				stream: false
 			};
+		} else if (provider.name.toLowerCase().includes('gemini') || provider.baseUrl.includes('generativelanguage.googleapis.com')) {
+			// Google Gemini OpenAI-compatible endpoint
+			requestUrl = provider.baseUrl;
+			if (requestUrl.includes('generativelanguage.googleapis.com') && !requestUrl.includes('/openai/')) {
+				requestUrl = requestUrl.replace('/v1beta/', '/v1beta/openai/');
+			}
+			requestBody = {
+				model: model.providerModelId,
+				messages: [
+					{ role: 'system', content: systemContent },
+					{ role: 'user', content: `${promptContext}` },
+					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
+				]
+			};
+			headers = {
+				...headers,
+				'HTTP-Referer': 'https://obsidian.md/',
+				'X-Title': 'Cabinet Web Clipper',
+				'Authorization': `Bearer ${provider.apiKey}`,
+				'x-goog-api-key': provider.apiKey
+			};
 		} else {
 			// Default request format
 			requestUrl = provider.baseUrl;
@@ -170,6 +195,13 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 				throw new Error(
 					`Ollama cannot process requests originating from a browser extension without setting OLLAMA_ORIGINS. ` +
 					`See instructions at https://help.obsidian.md/web-clipper/interpreter`
+				);
+			}
+
+			// Add specific message for Google Gemini 401 errors
+			if ((provider.name.toLowerCase().includes('gemini') || provider.baseUrl.includes('generativelanguage.googleapis.com')) && response.status === 401) {
+				throw new Error(
+					`Google Gemini authentication failed (401). Please check that your API key is valid from https://aistudio.google.com/apikey.`
 				);
 			}
 			
