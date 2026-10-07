@@ -2,10 +2,13 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { saveToCabinet } from './obsidian-note-creator';
 import browser from './browser-polyfill';
 import * as clipboardUtils from './clipboard-utils';
+import * as browserDetection from './browser-detection';
 
 describe('saveToCabinet', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
+		// By default in unit tests, local auto-detection returns null unless explicitly mocked
+		vi.spyOn(browserDetection, 'detectCabinetApiUrl').mockResolvedValue(null);
 	});
 
 	afterEach(() => {
@@ -93,5 +96,54 @@ describe('saveToCabinet', () => {
 		const urlObj = new URL(sentUrl);
 		expect(urlObj.searchParams.get('content')).toBe('# Direct Content');
 		expect(urlObj.searchParams.get('clipboard')).toBeNull();
+	});
+
+	test('auto-routes via HTTP PUT when running in Cabinet browser / local daemon is detected', async () => {
+		vi.spyOn(browserDetection, 'detectCabinetApiUrl').mockResolvedValue('http://127.0.0.1:4000');
+
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+		});
+		global.fetch = mockFetch;
+
+		const result = await saveToCabinet(
+			'# Auto Detected',
+			{ type: 'Clipping' },
+			'Article Inside Cabinet',
+			'Inbox',
+			'Cabinet',
+			'' // cabinetUrl is empty
+		);
+
+		expect(result).toBe(true);
+		expect(mockFetch).toHaveBeenCalledTimes(1);
+		const [url, options] = mockFetch.mock.calls[0];
+		// Root cabinet "Cabinet" should not be prefixed; path should be Inbox/Article Inside Cabinet
+		expect(url).toBe('http://127.0.0.1:4000/api/pages/Inbox/Article%20Inside%20Cabinet');
+		expect(options.method).toBe('PUT');
+	});
+
+	test('preserves relative folderPath when root cabinet is selected without rooms', async () => {
+		const sendMessageSpy = vi.spyOn(browser.runtime, 'sendMessage').mockResolvedValue({ success: true });
+		vi.spyOn(clipboardUtils, 'copyToClipboard').mockResolvedValue(true);
+
+		const result = await saveToCabinet(
+			'# Root Cabinet Clip',
+			{ type: 'Clipping' },
+			'Inbox Article',
+			'Inbox',
+			'PersonalCabinet',
+			''
+		);
+
+		expect(result).toBe(true);
+		const callArg = sendMessageSpy.mock.calls[0]?.[0] as any;
+		const sentUrl = callArg?.url;
+		const urlObj = new URL(sentUrl);
+		// With root cabinet "PersonalCabinet", file should be Inbox/Inbox Article, not PersonalCabinet/Inbox/...
+		expect(urlObj.searchParams.get('file')).toBe('Inbox/Inbox Article');
+		expect(urlObj.searchParams.get('path')).toBe('Inbox/');
 	});
 });

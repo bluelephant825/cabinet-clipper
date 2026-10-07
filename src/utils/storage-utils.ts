@@ -174,11 +174,19 @@ export async function loadSettings(): Promise<Settings> {
 
 	// Validate and sanitize data to prevent corruption
 	const sanitizedVaults = Array.isArray(data.vaults) ? data.vaults.filter(v => typeof v === 'string') : [];
+	const dedupeById = <T extends { id: string }>(items: T[]): T[] => {
+		const seen = new Set<string>();
+		return items.filter(item => {
+			if (seen.has(item.id)) return false;
+			seen.add(item.id);
+			return true;
+		});
+	};
 	const sanitizedModels = Array.isArray(data.interpreter_settings?.models) 
-		? data.interpreter_settings.models.filter(m => m && typeof m === 'object' && typeof m.id === 'string') 
+		? dedupeById(data.interpreter_settings.models.filter(m => m && typeof m === 'object' && typeof m.id === 'string'))
 		: [];
 	const sanitizedProviders = Array.isArray(data.interpreter_settings?.providers) 
-		? data.interpreter_settings.providers.filter(p => p && typeof p === 'object' && typeof p.id === 'string') 
+		? dedupeById(data.interpreter_settings.providers.filter(p => p && typeof p === 'object' && typeof p.id === 'string'))
 		: [];
 
 	// Load user settings

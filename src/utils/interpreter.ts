@@ -340,90 +340,84 @@ interface LLMResponse {
 	prompts_responses: { [key: string]: string };
 }
 
-function parseLLMResponse(responseContent: string, promptVariables: PromptVariable[]): { promptResponses: any[] } {
+export function parseLLMResponse(responseContent: string, promptVariables: PromptVariable[]): { promptResponses: any[] } {
 	try {
-		let parsedResponse: LLMResponse;
+		let parsedResponse: LLMResponse | null = null;
 		
 		// If responseContent is already an object, convert to string
-		if (typeof responseContent === 'object') {
+		if (typeof responseContent === 'object' && responseContent !== null) {
 			responseContent = JSON.stringify(responseContent);
 		}
 
-		// Helper function to sanitize JSON string
-		const sanitizeJsonString = (str: string) => {
-			// First, normalize all newlines to \n
-			let result = str.replace(/\r\n/g, '\n');
-			
-			// Escape newlines properly
-			result = result.replace(/\n/g, '\\n');
-			
-			// Escape quotes that are part of the content
-			result = result.replace(/(?<!\\)"/g, '\\"');
-			
-			// Then unescape the quotes that are JSON structural elements
-			result = result.replace(/(?<=[{[,:]\s*)\\"/g, '"')
-				.replace(/\\"(?=\s*[}\],:}])/g, '"');
-			
-			return result
-				// Replace curly quotes
-				.replace(/[""]/g, '\\"')
-				// Remove any bad control characters
-				.replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g, '')
-				// Remove any whitespace between quotes and colons
-				.replace(/"\s*:/g, '":')
-				.replace(/:\s*"/g, ':"')
-				// Fix any triple or more backslashes
-				.replace(/\\{3,}/g, '\\\\');
-		};
+		let raw = String(responseContent).trim();
 
-		// First try to parse the content directly
+		// 1. Strip markdown code fences if present (e.g. ```json ... ```)
+		const codeBlockMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+		if (codeBlockMatch) {
+			raw = codeBlockMatch[1].trim();
+		}
+
+		// 2. Try direct JSON parsing
 		try {
-			const sanitizedContent = sanitizeJsonString(responseContent);
-			debugLog('Interpreter', 'Sanitized content:', sanitizedContent);
-			parsedResponse = JSON.parse(sanitizedContent);
-		} catch (e) {
-			// If direct parsing fails, try to extract and parse the JSON content
-			const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
-			if (!jsonMatch) {
-				throw new Error('No JSON object found in response');
-			}
-
-			// Try parsing with minimal sanitization first
-			try {
-				const minimalSanitized = jsonMatch[0]
-					.replace(/[""]/g, '"')
-					.replace(/\r\n/g, '\\n')
-					.replace(/\n/g, '\\n');
-				parsedResponse = JSON.parse(minimalSanitized);
-			} catch (minimalError) {
-				// If minimal sanitization fails, try full sanitization
-				const sanitizedMatch = sanitizeJsonString(jsonMatch[0]);
-				debugLog('Interpreter', 'Fully sanitized match:', sanitizedMatch);
-				
+			parsedResponse = JSON.parse(raw);
+		} catch {
+			// 3. Try finding the outer JSON object { ... }
+			const jsonMatch = raw.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
 				try {
-					parsedResponse = JSON.parse(sanitizedMatch);
-				} catch (fullError) {
-					// Last resort: try to manually rebuild the JSON structure
-					const prompts_responses: { [key: string]: string } = {};
-					
-					// Extract each prompt response separately
-					promptVariables.forEach((variable, index) => {
-						const promptKey = `prompt_${index + 1}`;
-						const promptRegex = new RegExp(`"${promptKey}"\\s*:\\s*"([^]*?)(?:"\\s*,|"\\s*})`, 'g');
-						const match = promptRegex.exec(jsonMatch[0]);
-						if (match) {
-							let content = match[1]
-								.replace(/"/g, '\\"')
-								.replace(/\r\n/g, '\\n')
-								.replace(/\n/g, '\\n');
-							prompts_responses[promptKey] = content;
-						}
-					});
-
-					const rebuiltJson = JSON.stringify({ prompts_responses });
-					debugLog('Interpreter', 'Rebuilt JSON:', rebuiltJson);
-					parsedResponse = JSON.parse(rebuiltJson);
+					parsedResponse = JSON.parse(jsonMatch[0]);
+				} catch {
+					// 4. Try parsing after removing unprintable control characters and trailing commas
+					try {
+						const cleaned = jsonMatch[0]
+							.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+							.replace(/,\s*([}\]])/g, '$1');
+						parsedResponse = JSON.parse(cleaned);
+					} catch {
+						// Fall through to regex extraction
+					}
 				}
+			}
+		}
+
+		// If parsed response doesn't have prompts_responses, but has prompt_1 directly:
+		if (parsedResponse && !parsedResponse.prompts_responses && typeof parsedResponse === 'object') {
+			const hasDirectKeys = promptVariables.some(v => v.key in (parsedResponse as any));
+			if (hasDirectKeys) {
+				parsedResponse = { prompts_responses: parsedResponse as any };
+			}
+		}
+
+		// 5. Fallback: manually extract each prompt response from the text if direct parsing didn't find prompts_responses
+		if (!parsedResponse?.prompts_responses) {
+			const prompts_responses: { [key: string]: string } = {};
+			const textToSearch = raw;
+
+			promptVariables.forEach((variable, index) => {
+				const promptKey = `prompt_${index + 1}`;
+				const promptRegex = new RegExp(`"${promptKey}"\\s*:\\s*"([\\s\\S]*?)(?:"\\s*,\\s*"prompt_|"\\s*,\\s*\\}|"\\s*\\})`, 'g');
+				let match = promptRegex.exec(textToSearch);
+				if (!match) {
+					const simpleRegex = new RegExp(`"${promptKey}"\\s*:\\s*"([^]*?)(?:"\\s*,|"\\s*})`, 'g');
+					match = simpleRegex.exec(textToSearch);
+				}
+				if (match) {
+					let content = match[1];
+					try {
+						content = JSON.parse(`"${content}"`);
+					} catch {
+						content = content
+							.replace(/\\"/g, '"')
+							.replace(/\\n/g, '\n')
+							.replace(/\\r/g, '')
+							.replace(/\\\\/g, '\\');
+					}
+					prompts_responses[promptKey] = content;
+				}
+			});
+
+			if (Object.keys(prompts_responses).length > 0) {
+				parsedResponse = { prompts_responses };
 			}
 		}
 
@@ -433,10 +427,11 @@ function parseLLMResponse(responseContent: string, promptVariables: PromptVariab
 			throw new Error('The model response did not contain any prompt responses.');
 		}
 
-		// Convert escaped newlines to actual newlines in the responses
+		// Convert escaped newlines to actual newlines and unescape any escaped double quotes
 		Object.keys(parsedResponse.prompts_responses).forEach(key => {
 			if (typeof parsedResponse.prompts_responses[key] === 'string') {
 				parsedResponse.prompts_responses[key] = parsedResponse.prompts_responses[key]
+					.replace(/\\"/g, '"')
 					.replace(/\\n/g, '\n')
 					.replace(/\r/g, '');
 			}
@@ -446,7 +441,7 @@ function parseLLMResponse(responseContent: string, promptVariables: PromptVariab
 		const promptResponses = promptVariables.map(variable => ({
 			key: variable.key,
 			prompt: variable.prompt,
-			user_response: parsedResponse.prompts_responses[variable.key] || ''
+			user_response: parsedResponse!.prompts_responses[variable.key] || ''
 		}));
 
 		debugLog('Interpreter', 'Successfully mapped prompt responses:', promptResponses);
@@ -798,6 +793,10 @@ export function replacePromptVariables(promptVariables: PromptVariable[], prompt
 						}
 					}
 
+					if (typeof value === 'string') {
+						value = value.replace(/\\"/g, '"');
+					}
+
 					if (filters) {
 						value = applyFilters(value, filters.slice(1));
 					}
@@ -819,7 +818,11 @@ async function cacheInterpreterResponses(url: string, promptVariables: PromptVar
 		promptVariables.forEach(variable => {
 			const response = promptResponses.find(r => r.key === variable.key);
 			if (response && response.user_response !== undefined) {
-				urlCache[variable.prompt] = response.user_response;
+				let val = response.user_response;
+				if (typeof val === 'string') {
+					val = val.replace(/\\"/g, '"');
+				}
+				urlCache[variable.prompt] = val;
 			}
 		});
 		
@@ -849,9 +852,13 @@ async function getCachedInterpreterResponses(url: string, promptVariables: Promp
 		
 		for (const variable of promptVariables) {
 			if (urlCache[variable.prompt] !== undefined) {
+				let user_response = urlCache[variable.prompt];
+				if (typeof user_response === 'string') {
+					user_response = user_response.replace(/\\"/g, '"');
+				}
 				promptResponses.push({
 					key: variable.key,
-					user_response: urlCache[variable.prompt]
+					user_response
 				});
 			} else {
 				return null;
@@ -890,7 +897,7 @@ export async function testProviderOrModelConnection(
 	let targetModelId = modelId ? modelId.trim() : '';
 	if (!targetModelId) {
 		if (pName.includes('gemini') || provider.baseUrl.includes('generativelanguage.googleapis.com')) {
-			targetModelId = 'gemini-2.5-flash';
+			targetModelId = 'gemini-3.8-flash';
 		} else if (pName.includes('anthropic')) {
 			targetModelId = 'claude-3-5-haiku-latest';
 		} else if (pName.includes('deepseek')) {

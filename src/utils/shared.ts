@@ -177,7 +177,7 @@ export function generateFrontmatter(
 				if (items.length > 0) {
 					frontmatter += '\n';
 					items.forEach(item => {
-						frontmatter += `  - "${escapeDoubleQuotes(item)}"\n`;
+						frontmatter += `  - "${escapeDoubleQuotes(item.replace(/\\"/g, '"'))}"\n`;
 					});
 				} else {
 					frontmatter += '\n';
@@ -199,7 +199,7 @@ export function generateFrontmatter(
 				frontmatter += property.value.trim() !== '' ? ` ${property.value}\n` : '\n';
 				break;
 			default:
-				frontmatter += property.value.trim() !== '' ? ` "${escapeDoubleQuotes(property.value)}"\n` : '\n';
+				frontmatter += property.value.trim() !== '' ? ` "${escapeDoubleQuotes(property.value.replace(/\\"/g, '"'))}"\n` : '\n';
 		}
 	}
 	frontmatter += '---\n';
@@ -239,7 +239,7 @@ export function generateFrontmatterObject(
 				} else {
 					items = valueStr.split(/,(?![^\[]*\]\])/).map(item => item.trim());
 				}
-				items = items.filter(item => item !== '');
+				items = items.map(item => item.replace(/\\"/g, '"').trim()).filter(item => item !== '');
 				if (items.length > 0) {
 					frontmatter[propertyName] = items;
 				}
@@ -261,7 +261,7 @@ export function generateFrontmatterObject(
 			case 'datetime':
 			default:
 				if (valueStr.trim() !== '') {
-					frontmatter[propertyName] = valueStr.trim();
+					frontmatter[propertyName] = valueStr.replace(/\\"/g, '"').trim();
 				}
 				break;
 		}

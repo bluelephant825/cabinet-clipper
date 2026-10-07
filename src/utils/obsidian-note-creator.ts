@@ -5,6 +5,7 @@ import { Template, Property } from '../types/types';
 import { generalSettings, incrementStat } from './storage-utils';
 import { copyToClipboard } from './clipboard-utils';
 import { getMessage } from './i18n';
+import { detectCabinetApiUrl } from './browser-detection';
 
 export async function generateFrontmatter(properties: Property[]): Promise<string> {
 	const typeMap: Record<string, string> = {};
@@ -125,11 +126,12 @@ export async function saveToCabinet(
 	if (vault.trim()) {
 		const vaultSegments = vault.trim().split('/');
 		if (vaultSegments.length > 1) {
-			// Drop the root cabinet name (first segment)
+			// Drop the root cabinet name (first segment) and keep the room path
 			const roomPath = vaultSegments.slice(1).join('/');
 			folderPath = roomPath ? `${roomPath}/${folderPath}` : folderPath;
 		} else {
-			folderPath = `${vault.trim()}/${folderPath}`;
+			// Root cabinet selected: folderPath stays relative to the root cabinet (do not prepend root cabinet name)
+			folderPath = folderPath;
 		}
 	}
 	if (folderPath && !folderPath.endsWith('/')) {
@@ -142,10 +144,19 @@ export async function saveToCabinet(
 	const formattedNoteName = sanitizeFileName(noteName);
 	const fullPath = `${folderPath}${formattedNoteName}`;
 
-	// If Cabinet API URL is configured, use HTTP PUT
-	if (cabinetUrl && cabinetUrl.trim() !== '') {
+	// Resolve effective Cabinet API URL: use configured URL, or auto-detect if running inside Cabinet's browser / local instance
+	let effectiveCabinetUrl = cabinetUrl?.trim() || '';
+	if (!effectiveCabinetUrl) {
+		const autoDetectedUrl = await detectCabinetApiUrl();
+		if (autoDetectedUrl) {
+			effectiveCabinetUrl = autoDetectedUrl;
+		}
+	}
+
+	// If Cabinet API URL is configured or auto-detected, use HTTP PUT
+	if (effectiveCabinetUrl && effectiveCabinetUrl.trim() !== '') {
 		try {
-			const baseUrl = cabinetUrl.replace(/\/+$/, '');
+			const baseUrl = effectiveCabinetUrl.replace(/\/+$/, '');
 			const pathSegments = fullPath.split('/').map(segment => encodeURIComponent(segment));
 			const url = `${baseUrl}/api/pages/${pathSegments.join('/')}`;
 			

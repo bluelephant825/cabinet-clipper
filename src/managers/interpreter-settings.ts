@@ -729,7 +729,9 @@ async function showProviderModal(provider: Provider, index?: number) {
 		newTestBtn.textContent = originalText;
 	});
 
+	let isSavingProvider = false;
 	newConfirmBtn?.addEventListener('click', async () => {
+		if (isSavingProvider) return;
 		const formData = new FormData(form);
 		const name = formData.get('name') as string;
 		let baseUrl = formData.get('baseUrl') as string;
@@ -766,14 +768,11 @@ async function showProviderModal(provider: Provider, index?: number) {
 			updatedProvider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
 		}
 
-		if (index !== undefined) {
-			generalSettings.providers[index] = updatedProvider;
-		} else {
-			generalSettings.providers.push(updatedProvider);
-		}
+		upsertById(generalSettings.providers, updatedProvider, index);
 
 		debugLog('Providers', 'Updated providers list:', generalSettings.providers);
 
+		isSavingProvider = true;
 		try {
 			await saveSettings();
 			debugLog('Providers', 'Settings saved');
@@ -782,6 +781,8 @@ async function showProviderModal(provider: Provider, index?: number) {
 		} catch (error) {
 			console.error('Failed to save settings:', error);
 			alert(getMessage('failedToSaveProvider'));
+		} finally {
+			isSavingProvider = false;
 		}
 	});
 
@@ -1293,7 +1294,9 @@ async function showModelModal(model: ModelConfig, index?: number) {
 			newTestBtn.textContent = originalText;
 		});
 
+		let isSavingModel = false;
 		newConfirmBtn.addEventListener('click', async () => {
+			if (isSavingModel) return;
 			const formData = new FormData(form);
 			const selectedProviderId = formData.get('providerId') as string;
 			
@@ -1313,12 +1316,9 @@ async function showModelModal(model: ModelConfig, index?: number) {
 				return;
 			}
 
-			if (index !== undefined) {
-				generalSettings.models[index] = updatedModel;
-			} else {
-				generalSettings.models.push(updatedModel);
-			}
+			upsertById(generalSettings.models, updatedModel, index);
 
+			isSavingModel = true;
 			try {
 				await saveSettings();
 				initializeModelList();
@@ -1326,6 +1326,8 @@ async function showModelModal(model: ModelConfig, index?: number) {
 			} catch (error) {
 				console.error('Failed to save model settings:', error);
 				alert(getMessage('failedToSaveModel'));
+			} finally {
+				isSavingModel = false;
 			}
 		});
 
@@ -1379,6 +1381,23 @@ function debounce(func: Function, delay: number): (...args: any[]) => void {
 		clearTimeout(timeoutId);
 		timeoutId = setTimeout(() => func(...args), delay);
 	};
+}
+
+/**
+ * Insert or replace an item in a list, keyed by id.
+ * Prevents duplicate entries if the save handler fires more than once.
+ */
+function upsertById<T extends { id: string }>(list: T[], item: T, index?: number): void {
+	if (index !== undefined && list[index]?.id === item.id) {
+		list[index] = item;
+		return;
+	}
+	const existingIndex = list.findIndex(entry => entry?.id === item.id);
+	if (existingIndex !== -1) {
+		list[existingIndex] = item;
+	} else {
+		list.push(item);
+	}
 }
 
 function duplicateModel(index: number) {

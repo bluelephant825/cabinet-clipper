@@ -1,7 +1,7 @@
 {
 	"name": "cabinet-clipper",
 	"version": "1.0.0",
-	"description": "Official web clipper for Cabinet.",
+	"description": "Web clipper for Cabinet",
 	"bin": {
 		"cabinet-clipper": "./dist/cli.cjs"
 	},

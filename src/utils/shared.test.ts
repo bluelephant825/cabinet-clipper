@@ -3,6 +3,7 @@ import {
 	buildVariables,
 	BuildVariablesParams,
 	generateFrontmatter,
+	generateFrontmatterObject,
 	extractContentBySelector,
 	addSchemaOrgDataToVariables,
 } from './shared';
@@ -378,6 +379,37 @@ describe('generateFrontmatter', () => {
 			{ name: 'quote', value: 'she said "hello"' },
 		]);
 		expect(result).toContain('quote: "she said \\"hello\\""');
+	});
+
+	test('normalizes pre-escaped quotes in generateFrontmatter instead of double-escaping', () => {
+		const result = generateFrontmatter([
+			{ name: 'description', value: 'prove a \\"singularity\\" exists' },
+		]);
+		expect(result).toContain('description: "prove a \\"singularity\\" exists"');
+		expect(result).not.toContain('\\\\"');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// generateFrontmatterObject
+// ---------------------------------------------------------------------------
+
+describe('generateFrontmatterObject', () => {
+	test('un-escapes pre-escaped double quotes in text properties', () => {
+		const result = generateFrontmatterObject([
+			{ name: 'description', value: 'Researchers used AI to prove a \\"singularity\\" exists' }
+		]);
+		expect(result).toEqual({
+			type: 'Clipping',
+			description: 'Researchers used AI to prove a "singularity" exists'
+		});
+	});
+
+	test('un-escapes pre-escaped double quotes in multitext properties', () => {
+		const result = generateFrontmatterObject([
+			{ name: 'tags', value: 'math, \\"singularity\\", fluid dynamics' }
+		], { tags: 'multitext' });
+		expect(result.tags).toEqual(['math', '"singularity"', 'fluid dynamics']);
 	});
 });
 

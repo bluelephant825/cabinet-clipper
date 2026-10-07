@@ -57,6 +57,65 @@ export async function detectBrowser(): Promise<'chrome' | 'firefox' | 'firefox-m
 	}
 }
 
+export async function isCabinetBrowser(): Promise<boolean> {
+	try {
+		if (typeof navigator !== 'undefined') {
+			const ua = navigator.userAgent?.toLowerCase() || '';
+			if (ua.includes('cabinet') || ua.includes('cabinet-chromium')) {
+				return true;
+			}
+			const brands = (navigator as any).userAgentData?.brands || [];
+			if (brands.some((b: any) => b.brand?.toLowerCase().includes('cabinet'))) {
+				return true;
+			}
+		}
+
+		if (typeof window !== 'undefined' && window) {
+			if ((window as any).cabinetHost || (window as any).CabinetDesktop) {
+				return true;
+			}
+		}
+
+		// Probe local Cabinet API on standard ports if we appear to be in a Chromium browser
+		const apiUrl = await detectCabinetApiUrl();
+		return apiUrl !== null;
+	} catch {
+		return false;
+	}
+}
+
+let cachedCabinetApiUrl: string | null | undefined = undefined;
+
+export async function detectCabinetApiUrl(timeoutMs = 600): Promise<string | null> {
+	if (cachedCabinetApiUrl !== undefined) {
+		return cachedCabinetApiUrl;
+	}
+
+	const candidatePorts = [4000, 3000];
+	for (const port of candidatePorts) {
+		try {
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), timeoutMs);
+			const response = await fetch(`http://127.0.0.1:${port}/api/pages`, {
+				method: 'GET',
+				signal: controller.signal
+			});
+			clearTimeout(timer);
+
+			// Cabinet Next.js API returns 200, 400, or 405 on /api/pages, but never network error
+			if (response.status !== 404 && response.status < 500) {
+				cachedCabinetApiUrl = `http://127.0.0.1:${port}`;
+				return cachedCabinetApiUrl;
+			}
+		} catch {
+			// Not running on this port
+		}
+	}
+
+	cachedCabinetApiUrl = null;
+	return null;
+}
+
 function isIPad(): boolean {
 	return navigator.userAgent.includes('iPad') ||
 		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
