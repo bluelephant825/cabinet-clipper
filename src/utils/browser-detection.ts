@@ -1,3 +1,5 @@
+import browser from './browser-polyfill';
+
 interface KagiWindow extends Window {
 	KAGI?: any;
 }
@@ -87,28 +89,39 @@ export async function isCabinetBrowser(): Promise<boolean> {
 let cachedCabinetApiUrl: string | null | undefined = undefined;
 
 export async function detectCabinetApiUrl(timeoutMs = 600): Promise<string | null> {
-	if (cachedCabinetApiUrl !== undefined) {
-		return cachedCabinetApiUrl;
-	}
-
+	const candidates = new Set<string>();
+	try {
+		const tabs = await browser.tabs.query({});
+		for (const tab of tabs) {
+			if (!tab.url) continue;
+			const url = new URL(tab.url);
+			if (['http:', 'https:'].includes(url.protocol) && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+				candidates.add(url.origin);
+			}
+		}
+	} catch {}
+	if (cachedCabinetApiUrl) candidates.add(cachedCabinetApiUrl);
 	const candidatePorts = [4000, 3000];
-	for (const port of candidatePorts) {
+	for (const port of candidatePorts) candidates.add(`http://127.0.0.1:${port}`);
+	for (const origin of candidates) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
 		try {
-			const controller = new AbortController();
-			const timer = setTimeout(() => controller.abort(), timeoutMs);
-			const response = await fetch(`http://127.0.0.1:${port}/api/pages`, {
+			const response = await fetch(`${origin}/api/health`, {
 				method: 'GET',
 				signal: controller.signal
 			});
-			clearTimeout(timer);
+			const health = response.ok ? await response.json() : null;
 
 			// Cabinet Next.js API returns 200, 400, or 405 on /api/pages, but never network error
-			if (response.status !== 404 && response.status < 500) {
-				cachedCabinetApiUrl = `http://127.0.0.1:${port}`;
-				return cachedCabinetApiUrl;
+			if (health?.status === 'ok' && typeof health.dataDir === 'string' && typeof health.installKind === 'string' && health.stale !== true) {
+				cachedCabinetApiUrl = origin;
+				return origin;
 			}
 		} catch {
 			// Not running on this port
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 

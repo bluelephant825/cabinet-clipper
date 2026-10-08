@@ -102,14 +102,12 @@ export async function saveToObsidian(
 	}
 }
 
-function openCabinetUrl(url: string): void {
-	browser.runtime.sendMessage({
+async function openCabinetUrl(url: string): Promise<boolean> {
+	const response = await browser.runtime.sendMessage({
 		action: "openCabinetUrl",
 		url: url
-	}).catch((error) => {
-		console.error('Error opening Cabinet URL via background script:', error);
-		window.open(url, '_blank');
 	});
+	return !!response && typeof response === 'object' && 'success' in response && response.success === true;
 }
 
 export async function saveToCabinet(
@@ -143,6 +141,8 @@ export async function saveToCabinet(
 
 	const formattedNoteName = sanitizeFileName(noteName);
 	const fullPath = `${folderPath}${formattedNoteName}`;
+	const metadata = Object.entries(frontmatter).map(([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`).join('\n');
+	const noteBody = fullMarkdownContent ?? (metadata ? `---\n${metadata}\n---\n${content}` : content);
 
 	// Resolve effective Cabinet API URL: use configured URL, or auto-detect if running inside Cabinet's browser / local instance
 	let effectiveCabinetUrl = cabinetUrl?.trim() || '';
@@ -157,17 +157,17 @@ export async function saveToCabinet(
 	if (effectiveCabinetUrl && effectiveCabinetUrl.trim() !== '') {
 		try {
 			const baseUrl = effectiveCabinetUrl.replace(/\/+$/, '');
-			const pathSegments = fullPath.split('/').map(segment => encodeURIComponent(segment));
-			const url = `${baseUrl}/api/pages/${pathSegments.join('/')}`;
+			const url = `${baseUrl}/api/clip`;
 			
 			const response = await fetch(url, {
-				method: 'PUT',
+				method: 'POST',
+				credentials: 'include',
 				headers: {
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					content,
-					frontmatter
+					file: fullPath,
+					markdown: noteBody
 				}),
 			});
 
@@ -185,7 +185,6 @@ export async function saveToCabinet(
 
 	// Standalone Cabinet App: Save via cabinet:// protocol
 	try {
-		const noteBody = fullMarkdownContent !== undefined ? fullMarkdownContent : content;
 		const params = new URLSearchParams();
 		if (vault.trim()) {
 			params.append('vault', vault.trim());
@@ -208,8 +207,7 @@ export async function saveToCabinet(
 		}
 
 		const cabinetUri = `cabinet://new?${params.toString()}`;
-		openCabinetUrl(cabinetUri);
-		return true;
+		return await openCabinetUrl(cabinetUri);
 	} catch (error) {
 		console.error('Error saving to Cabinet via protocol:', error);
 		return false;

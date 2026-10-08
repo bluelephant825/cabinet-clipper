@@ -116,7 +116,7 @@ export function createDefaultTemplate(): Template {
 		name: getMessage('defaultTemplateName'),
 		behavior: 'create',
 		noteNameFormat: '{{title}}',
-		path: 'Clippings',
+		path: 'Inbox',
 		noteContentFormat: '{{content}}',
 		context: "",
 		properties: [

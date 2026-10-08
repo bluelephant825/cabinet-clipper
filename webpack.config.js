@@ -147,6 +147,7 @@ module.exports = (env, argv) => {
 					{ from: "src/popup.html", to: "popup.html" },
 					{ from: "src/side-panel.html", to: "side-panel.html" },
 					{ from: "src/settings.html", to: "settings.html" },
+					{ from: "providers.json", to: "providers.json" },
 					{ from: "src/highlights.html", to: "highlights.html" },
 					{ from: "src/reader.html", to: "reader.html" },
 					{ from: "src/icons", to: "icons" },

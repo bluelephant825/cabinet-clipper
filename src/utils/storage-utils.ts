@@ -182,12 +182,27 @@ export async function loadSettings(): Promise<Settings> {
 			return true;
 		});
 	};
-	const sanitizedModels = Array.isArray(data.interpreter_settings?.models) 
-		? dedupeById(data.interpreter_settings.models.filter(m => m && typeof m === 'object' && typeof m.id === 'string'))
-		: [];
-	const sanitizedProviders = Array.isArray(data.interpreter_settings?.providers) 
+	const providerIds = new Map<string, string>();
+	const modelIds = new Map<string, string>();
+	const dedupeByIdentity = <T extends { id: string }>(items: T[], key: (item: T) => string, ids: Map<string, string>): T[] => {
+		const seen = new Map<string, string>();
+		return items.filter(item => {
+			const identity = key(item);
+			const existingId = seen.get(identity);
+			ids.set(item.id, existingId ?? item.id);
+			if (existingId !== undefined) return false;
+			seen.set(identity, item.id);
+			return true;
+		});
+	};
+	const validProviders = Array.isArray(data.interpreter_settings?.providers)
 		? dedupeById(data.interpreter_settings.providers.filter(p => p && typeof p === 'object' && typeof p.id === 'string'))
 		: [];
+	const sanitizedProviders = dedupeByIdentity(validProviders, p => JSON.stringify([p.name, p.baseUrl, p.apiKey, p.apiKeyRequired !== false, p.presetId]), providerIds);
+	const validModels = Array.isArray(data.interpreter_settings?.models)
+		? dedupeById(data.interpreter_settings.models.filter(m => m && typeof m === 'object' && typeof m.id === 'string')).map(m => ({ ...m, providerId: providerIds.get(m.providerId) ?? m.providerId }))
+		: [];
+	const sanitizedModels = dedupeByIdentity(validModels, m => JSON.stringify([m.name, m.providerId, m.providerModelId, m.enabled]), modelIds);
 
 	// Load user settings
 	const loadedSettings: Settings = {
@@ -202,7 +217,7 @@ export async function loadSettings(): Promise<Settings> {
 		highlighterEnabled: data.highlighter_settings?.highlighterEnabled ?? defaultSettings.highlighterEnabled,
 		alwaysShowHighlights: data.highlighter_settings?.alwaysShowHighlights ?? defaultSettings.alwaysShowHighlights,
 		highlightBehavior: data.highlighter_settings?.highlightBehavior ?? defaultSettings.highlightBehavior,
-		interpreterModel: data.interpreter_settings?.interpreterModel || defaultSettings.interpreterModel,
+		interpreterModel: modelIds.get(data.interpreter_settings?.interpreterModel || '') ?? (data.interpreter_settings?.interpreterModel || defaultSettings.interpreterModel),
 		models: sanitizedModels,
 		providers: sanitizedProviders,
 		interpreterEnabled: data.interpreter_settings?.interpreterEnabled ?? defaultSettings.interpreterEnabled,

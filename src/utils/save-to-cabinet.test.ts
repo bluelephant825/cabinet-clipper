@@ -35,11 +35,12 @@ describe('saveToCabinet', () => {
 		expect(result).toBe(true);
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 		const [url, options] = mockFetch.mock.calls[0];
-		expect(url).toBe('http://localhost:4000/api/pages/Room1/articles/Test%20Note');
-		expect(options.method).toBe('PUT');
+		expect(url).toBe('http://localhost:4000/api/clip');
+		expect(options.method).toBe('POST');
+		expect(options.credentials).toBe('include');
 		expect(JSON.parse(options.body)).toEqual({
-			content: '# Test Content',
-			frontmatter: { type: 'Clipping', title: 'Test Note' },
+			file: 'Room1/articles/Test Note',
+			markdown: '---\n"type": "Clipping"\n"title": "Test Note"\n---\n# Test Content',
 		});
 	});
 
@@ -98,7 +99,7 @@ describe('saveToCabinet', () => {
 		expect(urlObj.searchParams.get('clipboard')).toBeNull();
 	});
 
-	test('auto-routes via HTTP PUT when running in Cabinet browser / local daemon is detected', async () => {
+	test('auto-routes via clip import when running in Cabinet browser / local daemon is detected', async () => {
 		vi.spyOn(browserDetection, 'detectCabinetApiUrl').mockResolvedValue('http://127.0.0.1:4000');
 
 		const mockFetch = vi.fn().mockResolvedValue({
@@ -121,8 +122,30 @@ describe('saveToCabinet', () => {
 		expect(mockFetch).toHaveBeenCalledTimes(1);
 		const [url, options] = mockFetch.mock.calls[0];
 		// Root cabinet "Cabinet" should not be prefixed; path should be Inbox/Article Inside Cabinet
-		expect(url).toBe('http://127.0.0.1:4000/api/pages/Inbox/Article%20Inside%20Cabinet');
-		expect(options.method).toBe('PUT');
+		expect(url).toBe('http://127.0.0.1:4000/api/clip');
+		expect(options.method).toBe('POST');
+		expect(JSON.parse(options.body).file).toBe('Inbox/Article Inside Cabinet');
+	});
+
+	test('passes full Markdown to the clip import API', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+		global.fetch = mockFetch;
+		const markdown = '---\ntitle: Article\ntags:\n  - clipping\n---\n# Content';
+		expect(await saveToCabinet('# Content', { title: 'Article' }, 'Article', 'Inbox', '', 'http://localhost:4000', markdown)).toBe(true);
+		expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ file: 'Inbox/Article', markdown });
+	});
+
+	test('reports failed protocol handoff instead of claiming a successful save', async () => {
+		vi.spyOn(browser.runtime, 'sendMessage').mockResolvedValue({ success: false, error: 'No active tab found' });
+		vi.spyOn(clipboardUtils, 'copyToClipboard').mockResolvedValue(true);
+		expect(await saveToCabinet('# Content', {}, 'Article', 'Inbox', '')).toBe(false);
+	});
+
+	test('does not fall back to protocol after a rejected API import', async () => {
+		global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+		const sendMessageSpy = vi.spyOn(browser.runtime, 'sendMessage');
+		expect(await saveToCabinet('# Content', {}, 'Article', 'Inbox', '', 'http://localhost:4000')).toBe(false);
+		expect(sendMessageSpy).not.toHaveBeenCalled();
 	});
 
 	test('preserves relative folderPath when root cabinet is selected without rooms', async () => {

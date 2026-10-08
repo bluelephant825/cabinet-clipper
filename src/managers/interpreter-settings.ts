@@ -6,6 +6,7 @@ import { showModal, hideModal } from '../utils/modal-utils';
 import { getMessage, translatePage } from '../utils/i18n';
 import { debugLog } from '../utils/debug';
 import { testProviderOrModelConnection } from '../utils/interpreter';
+import browser from '../utils/browser-polyfill';
 
 export interface PresetProvider {
 	id: string;
@@ -37,11 +38,33 @@ let lastErrorTime = 0;
 let isFetching = false;
 
 let cachedPresetProviders: Record<string, PresetProvider> | null = null;
+let bundledPresetsPromise: Promise<ProviderPresets> | null = null;
+
+function getBundledPresets(): Promise<ProviderPresets> {
+	if (!bundledPresetsPromise) {
+		bundledPresetsPromise = fetch(browser.runtime.getURL('providers.json')).then(async response => {
+			if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+			return await response.json() as ProviderPresets;
+		}).catch(error => {
+			bundledPresetsPromise = null;
+			throw error;
+		});
+	}
+	return bundledPresetsPromise;
+}
+
+async function getPreferredPresetData(): Promise<ProviderPresets | null> {
+	const [local, bundled] = await Promise.all([
+		getLocalStorage(LOCAL_STORAGE_KEY) as Promise<ProviderPresets | null>,
+		getBundledPresets().catch(() => null)
+	]);
+	return bundled && (!local || bundled.version >= local.version) ? bundled : local;
+}
 
 async function fetchPresetProviders(): Promise<Record<string, PresetProvider>> {
 	debugLog('Providers', 'Fetching preset providers from URL:', PROVIDERS_URL);
 	try {
-		const response = await fetch(PROVIDERS_URL);
+		const response = await fetch(PROVIDERS_URL, { signal: AbortSignal.timeout(5000) });
 		if (!response.ok) {
 			throw new Error(`HTTP error! status: ${response.status}`);
 		}
@@ -56,7 +79,7 @@ async function fetchPresetProviders(): Promise<Record<string, PresetProvider>> {
 				const provider = data[key] as PresetProvider;
 				provider.id = key;
 				if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
-					provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
+					provider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
 				}
 				providers[key] = provider;
 			}
@@ -72,7 +95,7 @@ async function fetchPresetProviders(): Promise<Record<string, PresetProvider>> {
 
 async function getLocalPresets(): Promise<Record<string, PresetProvider> | null> {
 	try {
-		const data = await getLocalStorage(LOCAL_STORAGE_KEY) as ProviderPresets | null;
+		const data = await getPreferredPresetData();
 		if (!data) return null;
 
 		const providers: Record<string, PresetProvider> = {};
@@ -81,7 +104,7 @@ async function getLocalPresets(): Promise<Record<string, PresetProvider> | null>
 				const provider = data[key] as PresetProvider;
 				provider.id = key;
 				if (provider.baseUrl && provider.baseUrl.includes('generativelanguage.googleapis.com') && !provider.baseUrl.includes('/openai/')) {
-					provider.baseUrl = provider.baseUrl.replace('/v1beta/', '/v1beta/openai/');
+					provider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
 				}
 				providers[key] = provider;
 			}
@@ -95,9 +118,9 @@ async function getLocalPresets(): Promise<Record<string, PresetProvider> | null>
 
 async function shouldUpdatePresets(): Promise<boolean> {
 	try {
-		const localData = await getLocalStorage(LOCAL_STORAGE_KEY) as ProviderPresets | null;
+		const localData = await getPreferredPresetData();
 		
-		const response = await fetch(PROVIDERS_URL);
+		const response = await fetch(PROVIDERS_URL, { signal: AbortSignal.timeout(5000) });
 		if (!response.ok) return false;
 		
 		const remoteData = await response.json() as ProviderPresets;
@@ -106,7 +129,7 @@ async function shouldUpdatePresets(): Promise<boolean> {
 		if (!localData) return true;
 		const localVersion = localData.version;
 
-		return localVersion !== remoteVersion; 
+		return remoteVersion > localVersion;
 	} catch (error) {
 		console.error('Failed to check provider versions:', error);
 		return false;
@@ -192,7 +215,7 @@ export async function initializeInterpreterSettings(): Promise<void> {
 	try {
 		const interpreterSettingsForm = document.getElementById('interpreter-settings-form');
 		if (interpreterSettingsForm) {
-			interpreterSettingsForm.addEventListener('input', debounce(saveInterpreterSettingsFromForm, 500));
+			interpreterSettingsForm.oninput = debounce(saveInterpreterSettingsFromForm, 500);
 		}
 
 		await loadSettings();
@@ -253,12 +276,12 @@ export async function initializeInterpreterSettings(): Promise<void> {
 		
 		const addModelBtn = document.getElementById('add-model-btn');
 		if (addModelBtn) {
-			addModelBtn.addEventListener('click', (event) => addModelToList(event));
+			addModelBtn.onclick = addModelToList;
 		}
 
 		const addProviderBtn = document.getElementById('add-provider-btn');
 		if (addProviderBtn) {
-			addProviderBtn.addEventListener('click', (event) => addProviderToList(event));
+			addProviderBtn.onclick = addProviderToList;
 		}
 	} catch (error) {
 		console.error('Error in initializeInterpreterSettings:', error);
@@ -467,7 +490,7 @@ function addProviderToList(event: Event) {
 	event.preventDefault();
 	debugLog('Providers', 'Adding new provider');
 	const newProvider: Provider = {
-		id: Date.now().toString(),
+		id: crypto.randomUUID(),
 		name: '',
 		baseUrl: '',
 		apiKey: ''
@@ -484,7 +507,7 @@ function duplicateProvider(index: number) {
 	const providerToDuplicate = generalSettings.providers[index];
 	const duplicatedProvider: Provider = {
 		...providerToDuplicate,
-		id: Date.now().toString(),
+		id: crypto.randomUUID(),
 		name: `${providerToDuplicate.name} (copy)`,
 		apiKey: ''
 	};
@@ -638,7 +661,7 @@ async function showProviderModal(provider: Provider, index?: number) {
 			}
 		};
 
-		presetSelect.addEventListener('change', updateVisibility);
+		presetSelect.onchange = updateVisibility;
 		updateVisibility();
 	}
 
@@ -768,6 +791,10 @@ async function showProviderModal(provider: Provider, index?: number) {
 			updatedProvider.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/{model-id}:generateContent';
 		}
 
+		if (index === undefined) {
+			const existing = generalSettings.providers.find(p => p.name === updatedProvider.name && p.baseUrl === updatedProvider.baseUrl && p.apiKey === updatedProvider.apiKey);
+			if (existing) updatedProvider.id = existing.id;
+		}
 		upsertById(generalSettings.providers, updatedProvider, index);
 
 		debugLog('Providers', 'Updated providers list:', generalSettings.providers);
@@ -1006,7 +1033,7 @@ function createModelListItem(model: ModelConfig, index: number): HTMLElement {
 function addModelToList(event: Event) {
 	event.preventDefault();
 	const newModel: ModelConfig = {
-		id: Date.now().toString(),
+		id: crypto.randomUUID(),
 		providerId: '',
 		providerModelId: '',
 		name: '',
@@ -1089,6 +1116,7 @@ async function showModelModal(model: ModelConfig, index?: number) {
 			providerModelIdInput.disabled = false;
 			// Clear model selection radios
 			modelSelectionRadios.textContent = '';
+			modelSelectionRadios.onchange = null;
 			modelSelectionContainer.style.display = 'none';
 			modelIdDescriptionContainer.textContent = getMessage('providerModelIdDescription');
 
@@ -1142,6 +1170,10 @@ async function showModelModal(model: ModelConfig, index?: number) {
 
 						if (index !== undefined && model.providerId === selectedProviderId && popModel.id === model.providerModelId) {
 							radioInput.checked = true;
+						} else if (index === undefined && popModel.recommended) {
+							radioInput.checked = true;
+							nameInput.value = popModel.name;
+							providerModelIdInput.value = popModel.id;
 						}
 					});
 
@@ -1174,7 +1206,7 @@ async function showModelModal(model: ModelConfig, index?: number) {
 						}
 					}
 
-					modelSelectionRadios.addEventListener('change', (e) => {
+					modelSelectionRadios.onchange = (e) => {
 						const target = e.target as HTMLInputElement;
 						if (!target || target.name !== 'model-selection') return;
 
@@ -1194,12 +1226,12 @@ async function showModelModal(model: ModelConfig, index?: number) {
 								providerModelIdInput.disabled = false; 
 							}
 						}
-					});
+					};
 				}
 			}
 		};
 
-		providerSelect.addEventListener('change', updateModelOptions);
+		providerSelect.onchange = updateModelOptions;
 
 		if (index !== undefined) {
 			providerSelect.value = model.providerId;
@@ -1316,6 +1348,10 @@ async function showModelModal(model: ModelConfig, index?: number) {
 				return;
 			}
 
+			if (index === undefined) {
+				const existing = generalSettings.models.find(m => m.providerId === updatedModel.providerId && m.providerModelId === updatedModel.providerModelId && m.name === updatedModel.name && m.enabled === updatedModel.enabled);
+				if (existing) updatedModel.id = existing.id;
+			}
 			upsertById(generalSettings.models, updatedModel, index);
 
 			isSavingModel = true;
@@ -1350,7 +1386,7 @@ function deleteModel(index: number) {
 function initializeAutoSave(): void {
 	const interpreterSettingsForm = document.getElementById('interpreter-settings-form');
 	if (interpreterSettingsForm) {
-		interpreterSettingsForm.addEventListener('input', debounce(saveInterpreterSettingsFromForm, 500));
+		interpreterSettingsForm.oninput = debounce(saveInterpreterSettingsFromForm, 500);
 	}
 }
 
@@ -1404,7 +1440,7 @@ function duplicateModel(index: number) {
 	const modelToDuplicate = generalSettings.models[index];
 	const duplicatedModel: ModelConfig = {
 		...modelToDuplicate,
-		id: Date.now().toString(),
+		id: crypto.randomUUID(),
 		name: `${modelToDuplicate.name} (copy)`
 	};
 
