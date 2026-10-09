@@ -3,10 +3,12 @@
 	"default_locale": "en",
 	"name": "Cabinet Web Clipper",
 	"homepage_url": "https://obsidian.md/",
-	"version": "1.7.1",
+	"version": "1.7.2",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1hAIM9WplZiW7EJVN+FKaqNQymVohrKxFwSr1Zf0b1ZkTTI1QOjl/GDSDKZNpOMlRPtdWyAaOqDeiFo1lHnjpjT/BmIZneg9UHPBvyIAkKow2ls33TuhYWttMFlBtanSaBXdfQ8MV9fHOE7f2BXuCrt9LvAs/VGgLah9mH7IbErctXh6kd/3Gote91BaS09SPtG8f4Vh4dWar8EPqdwkMv2jtGlYwt5gx9dpSTbueTL2iTL9runMm9ImhZ+X600aDVYoItx0Qyr0vJ5rXjKGfNiSaNpsATetHvPleVcE6I/XJcWt69cfxDJ5LhlPyaNnAS8ZKk73NSHLc/NdKLaUawIDAQAB",
 	"description": "Save and highlight web pages in a private and durable format that you can access offline.",
 	"permissions": [
 		"activeTab",
+		"nativeMessaging",
 		"clipboardWrite",
 		"commands",
 		"contextMenus",

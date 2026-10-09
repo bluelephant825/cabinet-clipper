@@ -328,10 +328,9 @@ export async function exportAllSettings(): Promise<void> {
 	try {
 		console.log('Fetching all data from browser storage');
 		const allData = await browser.storage.sync.get(null) as StorageData;
-		console.log('All data fetched:', allData);
 
 		// Create a copy of the data to modify
-		const exportData: StorageData = { ...allData };
+		const exportData: StorageData = { ...allData, __cabinetLocalStorage: await browser.storage.local.get(null) };
 
 		// Decompress all templates
 		const templateIds = exportData.template_list || [];
@@ -349,7 +348,6 @@ export async function exportAllSettings(): Promise<void> {
 			}
 		}
 
-		console.log('Data prepared for export:', exportData);
 		const content = JSON.stringify(exportData, null, 2);
 		console.log('Data stringified, length:', content.length);
 
@@ -379,13 +377,16 @@ export function importAllSettings(): void {
 	);
 }
 
-async function importAllSettingsFromJson(jsonContent: string): Promise<void> {
+export async function importAllSettingsFromJson(jsonContent: string): Promise<void> {
 	try {
 		const settings = JSON.parse(jsonContent) as StorageData;
 		
 		if (confirm(getMessage('confirmReplaceSettings'))) {
 			// Create a copy of the settings to modify
-			const importData: StorageData = { ...settings };
+			const { __cabinetLocalStorage: localData, ...importData } = settings;
+			if (localData !== undefined && (!localData || typeof localData !== 'object' || Array.isArray(localData))) {
+				throw new Error('Invalid local settings data');
+			}
 			
 			// Compress all templates
 			const templateIds = importData.template_list || [];
@@ -418,6 +419,7 @@ async function importAllSettingsFromJson(jsonContent: string): Promise<void> {
 
 			await browser.storage.sync.clear();
 			await browser.storage.sync.set(importData);
+			if (localData) await browser.storage.local.set(localData);
 			await loadSettings();
 			await loadTemplates();
 			updateTemplateList();

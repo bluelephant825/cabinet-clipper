@@ -1,4 +1,5 @@
 import browser from './browser-polyfill';
+import { discoverCabinetNativeApi, isLoopbackApiUrl } from './cabinet-native-bridge';
 
 interface KagiWindow extends Window {
 	KAGI?: any;
@@ -88,8 +89,11 @@ export async function isCabinetBrowser(): Promise<boolean> {
 
 let cachedCabinetApiUrl: string | null | undefined = undefined;
 
-export async function detectCabinetApiUrl(timeoutMs = 600): Promise<string | null> {
+export async function detectCabinetApiUrl(timeoutMs = 1000, configuredUrl?: string): Promise<string | null> {
 	const candidates = new Set<string>();
+	const nativeUrl = await discoverCabinetNativeApi();
+	if (nativeUrl) candidates.add(nativeUrl);
+	if (configuredUrl && isLoopbackApiUrl(configuredUrl)) candidates.add(new URL(configuredUrl).origin);
 	try {
 		const tabs = await browser.tabs.query({});
 		for (const tab of tabs) {

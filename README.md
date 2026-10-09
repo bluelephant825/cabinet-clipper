@@ -87,6 +87,19 @@ For iOS Simulator testing on macOS:
 5. Once the app is running on the simulator, open **Safari**
 6. Navigate to a webpage and tap the **Extensions** button in Safari to access the Web Clipper extension
 
+### Cabinet native connection and upgrading existing installs
+
+The Chromium extension uses Cabinet's `ai.cabinet.clipper` native-messaging host to discover the current local API address. The updated macOS Cabinet launcher registers the host for external Chrome and Cabinet's built-in Chromium on startup. Launch the updated Cabinet app once after installation, then leave the extension's Cabinet API URL empty. The bridge can start Cabinet on subsequent clipping requests if it is closed. Remote instances can still use an explicit API URL and must satisfy Cabinet's normal authentication.
+
+Imports use `POST /api/clip` and require a confirmed saved-path response. Protocol navigation alone is never treated as a successful save. A Cabinet app build containing the native host is required; updating only the extension does not install the bridge.
+
+The extension has the stable Chromium ID `bbddlgefpahcbpcaikiacdpghikifabf`, pinned by the `key` field in `src/manifest.chrome.json`. The ID follows the key, not the load path, so the same unpacked `dist/` build is the extension wherever it is loaded from. Existing path-derived unpacked installs need a one-time settings migration in each browser profile:
+
+1. Before uninstalling or reloading the old extension, open its settings and select **Export all settings**. Keep the exported JSON private because it contains provider API keys.
+2. Run `npm run build:chrome`, install the updated Cabinet app, and load the extension from `dist/`. The pinned `key` gives it the ID in Cabinet's native-host allowlist, regardless of the folder it is loaded from.
+3. Use **Import all settings** in the new extension and select the exported JSON. Templates, provider credentials, models, and other synced settings are restored. Clear any old loopback API URL to use automatic discovery. Exports made by this updated build also restore local clip history and highlights; older exports contain only synced settings.
+4. Use **Verify connection** before clipping. Retain the old settings backup until verification succeeds, and do not remove the old extension beforehand.
+
 ### Run tests
 
 ```

@@ -1328,8 +1328,10 @@ function cleanProperties(properties: Property[]): Property[] {
 	});
 }
 
+let cabinetSaveInProgress = false;
+
 async function handleClipCabinet(): Promise<void> {
-	if (!currentTemplate) return;
+	if (!currentTemplate || cabinetSaveInProgress) return;
 
 	const vaultDropdown = document.getElementById('vault-select') as HTMLSelectElement;
 	const noteContentField = document.getElementById('note-content-field') as HTMLTextAreaElement;
@@ -1342,6 +1344,9 @@ async function handleClipCabinet(): Promise<void> {
 		return;
 	}
 
+	const clipButton = document.getElementById('clip-btn') as HTMLButtonElement | null;
+	cabinetSaveInProgress = true;
+	if (clipButton) clipButton.disabled = true;
 	try {
 		// Wait for interpreter if it is currently running
 		if (generalSettings.interpreterEnabled && interpretBtn && collectPromptVariables(currentTemplate).length > 0) {
@@ -1368,7 +1373,7 @@ async function handleClipCabinet(): Promise<void> {
 		const success = await saveToCabinet(fileContent, frontmatterObject, noteName, path, selectedVault, cabinetUrl, fullFileContent);
 		
 		if (!success) {
-			showError('failedToSaveFile');
+			showError('cabinetConnectionFailed');
 			return;
 		}
 
@@ -1384,7 +1389,9 @@ async function handleClipCabinet(): Promise<void> {
 	} catch (error) {
 		console.error('Error in handleClipCabinet:', error);
 		showError('failedToSaveFile');
-		throw error;
+	} finally {
+		cabinetSaveInProgress = false;
+		if (clipButton) clipButton.disabled = false;
 	}
 }
 

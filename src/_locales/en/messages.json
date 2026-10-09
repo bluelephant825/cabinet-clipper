@@ -342,6 +342,9 @@
 	"failedToSaveFile": {
 		"message": "Failed to save file"
 	},
+	"cabinetConnectionFailed": {
+		"message": "Cabinet could not confirm the save. Start the updated Cabinet app and use Verify connection in the clipper settings. For a password-protected Cabinet, sign in to its URL in this browser."
+	},
 	"failedToSaveProvider": {
 		"message": "Failed to save provider. Please try again."
 	},

@@ -2,6 +2,7 @@
 export const runtime = {
 	getURL: (path: string) => `chrome-extension://mock-id/${path}`,
 	sendMessage: async () => ({}),
+	sendNativeMessage: async (_host: string, _message: unknown): Promise<any> => { throw new Error('Native host is not installed'); },
 	onMessage: {
 		addListener: () => {},
 		removeListener: () => {},
@@ -16,6 +17,7 @@ export const storage = {
 	sync: {
 		get: async () => ({}),
 		set: async () => {},
+		clear: async () => {},
 	},
 	onChanged: {
 		addListener: () => {},

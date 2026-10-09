@@ -142,7 +142,7 @@ module.exports = (env, argv) => {
 					{ 
 						from: isFirefox ? "src/manifest.firefox.json" : 
 							  (isSafari ? "src/manifest.safari.json" : "src/manifest.chrome.json"), 
-						to: "manifest.json" 
+						to: "manifest.json"
 					},
 					{ from: "src/popup.html", to: "popup.html" },
 					{ from: "src/side-panel.html", to: "side-panel.html" },

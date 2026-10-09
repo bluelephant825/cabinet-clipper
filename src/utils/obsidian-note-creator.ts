@@ -6,6 +6,7 @@ import { generalSettings, incrementStat } from './storage-utils';
 import { copyToClipboard } from './clipboard-utils';
 import { getMessage } from './i18n';
 import { detectCabinetApiUrl } from './browser-detection';
+import { isLoopbackApiUrl } from './cabinet-native-bridge';
 
 export async function generateFrontmatter(properties: Property[]): Promise<string> {
 	const typeMap: Record<string, string> = {};
@@ -102,14 +103,6 @@ export async function saveToObsidian(
 	}
 }
 
-async function openCabinetUrl(url: string): Promise<boolean> {
-	const response = await browser.runtime.sendMessage({
-		action: "openCabinetUrl",
-		url: url
-	});
-	return !!response && typeof response === 'object' && 'success' in response && response.success === true;
-}
-
 export async function saveToCabinet(
 	content: string,
 	frontmatter: Record<string, any>,
@@ -146,8 +139,8 @@ export async function saveToCabinet(
 
 	// Resolve effective Cabinet API URL: use configured URL, or auto-detect if running inside Cabinet's browser / local instance
 	let effectiveCabinetUrl = cabinetUrl?.trim() || '';
-	if (!effectiveCabinetUrl) {
-		const autoDetectedUrl = await detectCabinetApiUrl();
+	if (!effectiveCabinetUrl || isLoopbackApiUrl(effectiveCabinetUrl)) {
+		const autoDetectedUrl = await detectCabinetApiUrl(1000, effectiveCabinetUrl || undefined);
 		if (autoDetectedUrl) {
 			effectiveCabinetUrl = autoDetectedUrl;
 		}
@@ -176,7 +169,8 @@ export async function saveToCabinet(
 				return false;
 			}
 			
-			return true;
+			const saved = await response.json() as { ok?: boolean; path?: string };
+			return saved.ok === true && typeof saved.path === 'string' && saved.path.length > 0;
 		} catch (error) {
 			console.error('Error saving to Cabinet API:', error);
 			return false;
@@ -184,32 +178,6 @@ export async function saveToCabinet(
 	}
 
 	// Standalone Cabinet App: Save via cabinet:// protocol
-	try {
-		const params = new URLSearchParams();
-		if (vault.trim()) {
-			params.append('vault', vault.trim());
-		}
-		if (folderPath) {
-			params.append('path', folderPath);
-		}
-		params.append('name', formattedNoteName);
-		params.append('file', fullPath);
-
-		if (generalSettings.silentOpen) {
-			params.append('silent', 'true');
-		}
-
-		const success = await copyToClipboard(noteBody);
-		if (success) {
-			params.append('clipboard', 'true');
-		} else {
-			params.append('content', noteBody);
-		}
-
-		const cabinetUri = `cabinet://new?${params.toString()}`;
-		return await openCabinetUrl(cabinetUri);
-	} catch (error) {
-		console.error('Error saving to Cabinet via protocol:', error);
-		return false;
-	}
+	console.error('No confirmed Cabinet connection. Start the updated Cabinet app to register its native bridge, then try again.');
+	return false;
 }

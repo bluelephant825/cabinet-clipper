@@ -3,7 +3,8 @@ import { initializeIcons } from '../icons/icons';
 import { getCommands } from '../utils/hotkeys';
 import { initializeToggles, updateToggleState, initializeSettingToggle } from '../utils/ui-utils';
 import { generalSettings, loadSettings, saveSettings, setLocalStorage, getLocalStorage } from '../utils/storage-utils';
-import { detectBrowser } from '../utils/browser-detection';
+import { detectBrowser, detectCabinetApiUrl } from '../utils/browser-detection';
+import { isLoopbackApiUrl } from '../utils/cabinet-native-bridge';
 import { createElementWithClass, createElementWithHTML } from '../utils/dom-utils';
 import { createDefaultTemplate, getTemplates, saveTemplateSettings } from '../managers/template-manager';
 import { updateTemplateList, showTemplateEditor } from '../managers/template-ui';
@@ -453,15 +454,6 @@ function initializeIntegrationsSettings(): void {
 	if (verifyBtn && cabinetUrlInput && statusDiv) {
 		verifyBtn.addEventListener('click', async () => {
 			const enteredUrl = cabinetUrlInput.value.trim();
-			if (!enteredUrl) {
-				statusDiv.style.display = 'flex';
-				statusDiv.style.alignItems = 'center';
-				statusDiv.style.gap = '6px';
-				statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">Configured for standalone Cabinet app (cabinet:// protocol).</span>`;
-				initializeIcons(statusDiv);
-				return;
-			}
-
 			verifyBtn.disabled = true;
 			const originalText = verifyBtn.textContent || '';
 			verifyBtn.textContent = 'Verifying...';
@@ -472,24 +464,20 @@ function initializeIntegrationsSettings(): void {
 			statusDiv.innerHTML = 'Checking connection...';
 
 			try {
-				const baseUrl = enteredUrl.replace(/\/+$/, '');
-				const controller = new AbortController();
-				const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-				const response = await fetch(`${baseUrl}/api/pages`, {
-					method: 'GET',
-					signal: controller.signal
-				});
-				clearTimeout(timeoutId);
-
-				if (response.status === 404) {
-					statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Verification failed: URL not found (404). Check if the API URL is correct.</span>`;
-				} else {
-					statusDiv.innerHTML = `<i data-lucide="check" style="color: var(--text-success);"></i> <span style="color: var(--text-success);">Connected successfully!</span>`;
+				const resolvedUrl = !enteredUrl || isLoopbackApiUrl(enteredUrl) ? await detectCabinetApiUrl(5000, enteredUrl || undefined) : enteredUrl;
+				if (!resolvedUrl) throw new Error('Cabinet is unavailable. Start the updated Cabinet app to register its native bridge, then try again.');
+				const baseUrl = resolvedUrl.replace(/\/+$/, '');
+				const response = await fetch(`${baseUrl}/api/health`, { credentials: 'include', signal: AbortSignal.timeout(5000) });
+				const health = response.ok ? await response.json() : null;
+				if (health?.status !== 'ok' || typeof health.dataDir !== 'string' || typeof health.installKind !== 'string' || health.stale === true) {
+					throw new Error('The endpoint is not a healthy Cabinet instance.');
 				}
+				statusDiv.textContent = `Connected to Cabinet at ${new URL(baseUrl).origin}`;
+				statusDiv.style.color = 'var(--text-success)';
 			} catch (error: any) {
 				const msg = error.name === 'AbortError' ? 'Connection timed out after 5s.' : (error.message || 'Network error');
-				statusDiv.innerHTML = `<i data-lucide="x" style="color: var(--text-error);"></i> <span style="color: var(--text-error);">Verification failed: ${msg}</span>`;
+				statusDiv.textContent = `Verification failed: ${msg}`;
+				statusDiv.style.color = 'var(--text-error)';
 			} finally {
 				verifyBtn.disabled = false;
 				verifyBtn.textContent = originalText;
