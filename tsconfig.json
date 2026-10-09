@@ -1,11 +1,10 @@
 {
 	"compilerOptions": {
-		"baseUrl": "src",
 		"paths": {
-			"*": ["*"],
-			"managers/*": ["managers/*"],
-			"utils/*": ["utils/*"],
-			"icons": ["icons"]
+			"*": ["./src/*"],
+			"managers/*": ["./src/managers/*"],
+			"utils/*": ["./src/utils/*"],
+			"icons": ["./src/icons"]
 		},
 		"target": "es6",
 		"module": "es2020",
@@ -17,7 +16,7 @@
 		"rootDir": "./src",
 		"sourceMap": true,
 		"typeRoots": ["./node_modules/@types", "./src/types"],
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"types": ["chrome", "webextension-polyfill", "node", "webpack-env"],
 		"lib": ["es2017", "dom"]
 	},
